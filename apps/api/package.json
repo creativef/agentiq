@@ -4,5 +4,8 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.5.6"
   }
 }
