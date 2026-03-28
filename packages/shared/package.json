@@ -2,7 +2,7 @@
   "name": "@mission-control/shared",
   "private": true,
   "scripts": {
-    "test": "pnpm -w vitest run"
+    "test": "pnpm -w exec vitest run"
   },
   "dependencies": {
     "zod": "^3.23.8"
