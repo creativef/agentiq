@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { calendar } from "./routes/calendar";
 import { chat } from "./routes/chat";
 import { journal } from "./routes/journal";
 import { realtime } from "./routes/realtime";
@@ -9,3 +10,4 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.route("/", realtime);
 app.route("/", chat);
 app.route("/", journal);
+app.route("/", calendar);
