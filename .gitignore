@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.pnpm-debug.log*
+.corepack/
+.openclaw/
+*.local
+.env*
+!.env.example

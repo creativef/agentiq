@@ -8,9 +8,9 @@
     "test": "pnpm -C packages/shared test && pnpm -C apps/api test && pnpm -C apps/web test"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "tsx": "^4.19.1",
-    "typescript": "^5.5.4",
-    "vitest": "^2.0.5"
+    "@vitejs/plugin-react": "^4.7.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
   }
 }
