@@ -1,0 +1,7 @@
+{
+  "name": "@mission-control/shared",
+  "private": true,
+  "scripts": {
+    "test": "vitest run"
+  }
+}
