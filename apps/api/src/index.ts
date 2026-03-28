@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { calendar } from "./routes/calendar";
 import { chat } from "./routes/chat";
+import { files } from "./routes/files";
 import { journal } from "./routes/journal";
 import { realtime } from "./routes/realtime";
 
@@ -11,3 +12,4 @@ app.route("/", realtime);
 app.route("/", chat);
 app.route("/", journal);
 app.route("/", calendar);
+app.route("/", files);
