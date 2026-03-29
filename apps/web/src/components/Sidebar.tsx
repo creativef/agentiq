@@ -1,6 +1,6 @@
 export default function Sidebar() {
   return (
-    <aside>
+    <aside className="sidebar">
       <h2>Companies</h2>
       <div>Acme Co</div>
       <h3>Projects</h3>
