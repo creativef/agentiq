@@ -1,0 +1,16 @@
+/* Theme tokens */
+:root {
+  --bg: #F5F8F6;
+  --card: #FFFFFF;
+  --text: #0F1A14;
+  --accent: #10B981;
+  --border: #DCE5DF;
+}
+
+[data-theme="dark"] {
+  --bg: #0E0B16;
+  --card: #171226;
+  --text: #ECE7FF;
+  --accent: #8B5CFF;
+  --border: #251B3A;
+}
