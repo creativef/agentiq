@@ -2,7 +2,7 @@ const tabs = ["Overview", "Chat", "Tasks", "Calendar", "Files"];
 
 export default function TopBar({ active }: { active: string }) {
   return (
-    <header>
+    <header className="topbar">
       <div>Mission Control</div>
       <nav>
         {tabs.map((tab) => (
