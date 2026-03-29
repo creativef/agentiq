@@ -1,6 +1,10 @@
 import { expect, it } from "vitest";
-import { companies } from "../src/db/schema";
+import { companies, projects, agents, tasks, events } from "../src/db/schema";
 
-it("has companies table", () => {
+it("defines core tables", () => {
   expect(companies).toBeDefined();
+  expect(projects).toBeDefined();
+  expect(agents).toBeDefined();
+  expect(tasks).toBeDefined();
+  expect(events).toBeDefined();
 });
