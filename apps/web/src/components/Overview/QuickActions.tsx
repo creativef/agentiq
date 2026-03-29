@@ -1,3 +1,3 @@
 export default function QuickActions() {
-  return <div>Quick Actions</div>;
+  return <div className="quick-actions">Quick Actions</div>;
 }

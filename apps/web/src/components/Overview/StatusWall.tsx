@@ -1,3 +1,3 @@
 export default function StatusWall() {
-  return <div>Status Wall</div>;
+  return <div className="status-wall">Status Wall</div>;
 }

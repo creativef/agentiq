@@ -1,3 +1,3 @@
 export default function KpiTiles() {
-  return <div>Live Agents</div>;
+  return <div className="kpi-grid">Live Agents</div>;
 }

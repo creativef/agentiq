@@ -1,3 +1,3 @@
 export default function OpsTimeline() {
-  return <div>Ops Timeline</div>;
+  return <div className="ops-timeline">Ops Timeline</div>;
 }
