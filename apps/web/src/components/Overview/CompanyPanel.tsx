@@ -1,10 +1,10 @@
 export default function CompanyPanel() {
   return (
-    <aside>
+    <aside className="card company-panel">
       <h2>Company Goal</h2>
-      <div>OKR Progress</div>
+      <div className="progress">OKR Progress</div>
       <h3>Org Snapshot</h3>
-      <div>Headcount</div>
+      <div className="label">Headcount</div>
     </aside>
   );
 }
