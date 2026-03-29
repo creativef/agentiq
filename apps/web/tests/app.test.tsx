@@ -4,5 +4,5 @@ import App from "../src/App";
 
 it("renders Mission Control shell", () => {
   render(<App />);
-  expect(screen.getByText(/Mission Control/i)).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /Mission Control/i })).toBeInTheDocument();
 });
