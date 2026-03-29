@@ -4,7 +4,7 @@ import ThemeToggle from "./components/ThemeToggle";
 
 export default function App() {
   return (
-    <div>
+    <div className="app-shell">
       <Sidebar />
       <main>
         <TopBar active="Overview" />
