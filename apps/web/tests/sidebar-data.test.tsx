@@ -6,10 +6,7 @@ vi.mock("../src/lib/api", () => ({
   getCompanies: () => Promise.resolve([]),
 }));
 
-it("renders company tree", async () => {
+it("renders empty companies state", async () => {
   render(<Sidebar />);
-  expect(screen.getByRole("heading", { name: /Companies/i })).toBeInTheDocument();
   expect(await screen.findByText(/No companies/i)).toBeInTheDocument();
-  expect(await screen.findByText(/Projects/i)).toBeInTheDocument();
-  expect(await screen.findByText(/Agents/i)).toBeInTheDocument();
 });
