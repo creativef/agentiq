@@ -5,6 +5,7 @@ import { files } from "./routes/files";
 import { journal } from "./routes/journal";
 import { realtime } from "./routes/realtime";
 import { openclaw } from "./routes/openclaw";
+import { data } from "./routes/data";
 
 export const app = new Hono();
 
@@ -15,3 +16,4 @@ app.route("/", journal);
 app.route("/", calendar);
 app.route("/", files);
 app.route("/", openclaw);
+app.route("/", data);
