@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import auth from "./routes/auth";
+import { dashboard } from "./routes/dashboard";
 import { calendar } from "./routes/calendar";
 import { chat } from "./routes/chat";
 import { files } from "./routes/files";
@@ -22,8 +23,7 @@ app.get("/health", (c) => c.json({ ok: true }));
 
 // Public
 app.route("/api", auth);
-
-// Protected routes
+app.route("/api", dashboard);
 app.notFound((c) => {
   return c.json({ error: "Not Found", path: c.req.path }, 404);
 });
