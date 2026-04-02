@@ -1,12 +1,13 @@
 import { Context, Next } from "hono";
-import { verify } from "hono/utils/jwt/jwt";
+import { jwt, verify } from "hono/jwt";
 
-export const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-prod";
+export const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
 
 export interface UserPayload {
   userId: string;
   email: string;
   role: string;
+  exp: number;
 }
 
 export const authMiddleware = async (c: Context, next: Next) => {

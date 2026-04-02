@@ -1,5 +1,11 @@
-import { serve } from '@hono/node-server'
+import { serve } from '@hono/node-server';
 import { app } from './index';
 
-serve({ fetch: app.fetch, port: 3000 });
-console.log('API server running on http://localhost:3000');
+const port = parseInt(process.env.PORT || '3000');
+
+serve({
+  fetch: app.fetch,
+  port,
+});
+
+console.log('API server running on port ' + port);
