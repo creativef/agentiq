@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { useNavigate } from "react-router";
 
 interface User {
   id: string;
@@ -17,13 +16,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
     // Check session on load
     fetch("/api/auth/me", { credentials: "include" })
       .then(res => res.ok ? res.json() : Promise.reject())
-      .then(data => setUser(data.user))
+      .then(data => {
+        if (data?.user) setUser(data.user);
+      })
       .catch(() => setUser(null));
   }, []);
 
@@ -35,8 +35,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       headers: { "Content-Type": "application/json" } 
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    setUser({ id: data.user.id, email: data.user.email });
+    if (!res.ok) throw new Error(data.error || "Login failed");
+    setUser(data.user);
   };
 
   const register = async (email: string, pass: string, company: string) => {
@@ -47,14 +47,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       headers: { "Content-Type": "application/json" } 
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    setUser({ id: data.user.id, email: data.user.email });
+    if (!res.ok) throw new Error(data.error || "Registration failed");
+    setUser(data.user);
   };
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
     setUser(null);
-    navigate("/login");
   };
 
   return <AuthContext.Provider value={{ user, login, register, logout }}>{children}</AuthContext.Provider>;
