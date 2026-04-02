@@ -1,16 +1,37 @@
-import Sidebar from "./components/Sidebar";
-import TopBar from "./components/TopBar";
-import ThemeToggle from "./components/ThemeToggle";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import Login from "./pages/Login";
+import DashboardLayout from "./layouts/DashboardLayout";
 
-export default function App() {
+// Placeholder pages
+const Placeholder = ({ name }: { name: string }) => <div style={{ padding: "2rem" }}><h1>{name}</h1><p>Coming soon in Phase 1...</p></div>;
+
+const ProtectedRoute = () => {
+  const { user } = useAuth();
+  return user ? <Outlet /> : <Navigate to="/login" />;
+};
+
+function App() {
   return (
-    <div className="app-shell">
-      <Sidebar />
-      <main className="main-content">
-        <TopBar active="Overview" />
-        <ThemeToggle />
-        <h1>Mission Control</h1>
-      </main>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<AuthProvider><Login /></AuthProvider>} />
+        
+        <Route path="/" element={<AuthProvider><ProtectedRoute /></AuthProvider>}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          
+          <Route path="dashboard" element={<DashboardLayout><Placeholder name="Dashboard" /></DashboardLayout>} />
+          <Route path="tasks" element={<DashboardLayout><Placeholder name="Tasks" /></DashboardLayout>} />
+          <Route path="agents" element={<DashboardLayout><Placeholder name="Agents" /></DashboardLayout>} />
+          <Route path="calendar" element={<DashboardLayout><Placeholder name="Calendar" /></DashboardLayout>} />
+          <Route path="files" element={<DashboardLayout><Placeholder name="Files" /></DashboardLayout>} />
+          <Route path="chat" element={<DashboardLayout><Placeholder name="Chat" /></DashboardLayout>} />
+          <Route path="org" element={<DashboardLayout><Placeholder name="Org Chart" /></DashboardLayout>} />
+          <Route path="company" element={<DashboardLayout><Placeholder name="Company Settings" /></DashboardLayout>} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
+
+export default App;
