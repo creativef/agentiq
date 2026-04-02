@@ -1,18 +1,13 @@
-import KpiTiles from "../components/Overview/KpiTiles";
-import StatusWall from "../components/Overview/StatusWall";
-import OpsTimeline from "../components/Overview/OpsTimeline";
-import QuickActions from "../components/Overview/QuickActions";
-import CompanyPanel from "../components/Overview/CompanyPanel";
+import { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function OpsDashboard() {
-  return (
-    <section>
-      <h1>Overview</h1>
-      <CompanyPanel />
-      <KpiTiles />
-      <StatusWall />
-      <OpsTimeline />
-      <QuickActions />
-    </section>
-  );
+  const { company, companies } = useAuth();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(false);
+  }, [company]);
+
+  return <div style={{ padding: "1.5rem" }}><h1>Operations Dashboard</h1><p>Using the main Dashboard page now.</p></div>;
 }

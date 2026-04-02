@@ -3,13 +3,13 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import Login from "./pages/Login";
 import DashboardLayout from "./layouts/DashboardLayout";
 import DashboardPage from "./pages/DashboardPage";
-
-const Placeholder = ({ name }: { name: string }) => (
-  <div style={{ padding: "2rem" }}>
-    <h1>{name}</h1>
-    <p style={{ color: "#888" }}>Coming soon in Phase 1...</p>
-  </div>
-);
+import AgentsPage from "./pages/AgentsPage";
+import TaskBoard from "./pages/TaskBoard";
+import CalendarMeetings from "./pages/CalendarMeetings";
+import ChatJournal from "./pages/ChatJournal";
+import FileHub from "./pages/FileHub";
+import CompanyOrg from "./pages/CompanyOrg";
+import CompanySettings from "./pages/CompanySettings";
 
 const ProtectedRoute = () => {
   const { user } = useAuth();
@@ -20,13 +20,13 @@ const AuthedApp = () => (
   <Routes>
     <Route index element={<Navigate to="/dashboard" replace />} />
     <Route path="dashboard" element={<DashboardLayout><DashboardPage /></DashboardLayout>} />
-    <Route path="tasks" element={<DashboardLayout><Placeholder name="Tasks" /></DashboardLayout>} />
-    <Route path="agents" element={<DashboardLayout><Placeholder name="Agents" /></DashboardLayout>} />
-    <Route path="calendar" element={<DashboardLayout><Placeholder name="Calendar" /></DashboardLayout>} />
-    <Route path="files" element={<DashboardLayout><Placeholder name="Files" /></DashboardLayout>} />
-    <Route path="chat" element={<DashboardLayout><Placeholder name="Chat" /></DashboardLayout>} />
-    <Route path="org" element={<DashboardLayout><Placeholder name="Org Chart" /></DashboardLayout>} />
-    <Route path="company" element={<DashboardLayout><Placeholder name="Company Settings" /></DashboardLayout>} />
+    <Route path="tasks" element={<DashboardLayout><TaskBoard /></DashboardLayout>} />
+    <Route path="agents" element={<DashboardLayout><AgentsPage /></DashboardLayout>} />
+    <Route path="calendar" element={<DashboardLayout><CalendarMeetings /></DashboardLayout>} />
+    <Route path="files" element={<DashboardLayout><FileHub /></DashboardLayout>} />
+    <Route path="chat" element={<DashboardLayout><ChatJournal /></DashboardLayout>} />
+    <Route path="org" element={<DashboardLayout><CompanyOrg /></DashboardLayout>} />
+    <Route path="company" element={<DashboardLayout><CompanySettings /></DashboardLayout>} />
   </Routes>
 );
 
