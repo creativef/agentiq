@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { useState } from "react";
 
