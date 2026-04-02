@@ -1,5 +1,6 @@
-import { Context, Next } from "hono";
-import { jwt, verify } from "hono/jwt";
+import type { Context, Next } from "hono";
+import { getCookie } from "hono/cookie";
+import { verify } from "hono/utils/jwt/jwt";
 
 export const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
 
@@ -11,7 +12,7 @@ export interface UserPayload {
 }
 
 export const authMiddleware = async (c: Context, next: Next) => {
-  const token = c.req.cookie("token");
+  const token = getCookie(c, "token");
   if (!token) {
     return c.json({ error: "Unauthorized" }, 401);
   }

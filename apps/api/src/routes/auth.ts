@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { setCookie, deleteCookie } from "hono/cookie";
 import bcrypt from "bcryptjs";
 import { sign } from "hono/jwt";
 
@@ -41,12 +42,13 @@ auth.post("/auth/register", async (c) => {
         await db.insert(agents).values({ companyId, projectId: projId, name: "Ops Agent", role: "AGENT" }).returning();
     }
 
-    const token = await sign({ userId, email, role: "OWNER", "exp": Math.floor(Date.now() / 1000) + 86400 * 30 }, JWT_SECRET);
+    const token = await sign({ userId, email, role: "OWNER", exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, JWT_SECRET);
 
-    c.cookie("token", token, { httpOnly: true, sameSite: "Strict", path: "/" });
+    setCookie(c, "token", token, { httpOnly: true, sameSite: "Strict", path: "/" });
 
     return c.json({ user: { id: userId, email }, company: companyId });
   } catch (e: any) {
+    console.error("Registration error:", e);
     return c.json({ error: e.message || "Registration failed" }, 500);
   }
 });
@@ -66,18 +68,19 @@ auth.post("/auth/login", async (c) => {
     const memberRes = await db.select().from(companyMembers).where(sql`user_id = ${userRes[0].id}`).limit(1);
     const companyId = memberRes[0]?.companyId;
 
-    const token = await sign({ userId: userRes[0].id, email: userRes[0].email, role: userRes[0].role, "exp": Math.floor(Date.now() / 1000) + 86400 * 30 }, JWT_SECRET);
+    const token = await sign({ userId: userRes[0].id, email: userRes[0].email, role: userRes[0].role, exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, JWT_SECRET);
     
-    c.cookie("token", token, { httpOnly: true, sameSite: "Strict", path: "/" });
+    setCookie(c, "token", token, { httpOnly: true, sameSite: "Strict", path: "/" });
 
     return c.json({ user: { id: userRes[0].id, email: userRes[0].email }, company: companyId });
   } catch (e: any) {
+    console.error("Login error:", e);
     return c.json({ error: e.message }, 500);
   }
 });
 
 auth.post("/auth/logout", async (c) => {
-    c.cookie("token", "", { expires: new Date(0) });
+    deleteCookie(c, "token", { path: "/" });
     return c.json({ ok: true });
 });
 
