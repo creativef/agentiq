@@ -4,6 +4,7 @@ import { logger } from 'hono/logger'
 import auth from "./routes/auth";
 import { dashboard } from "./routes/dashboard";
 import { agentsRouter } from "./routes/agents";
+import { tasksRouter } from "./routes/tasks";
 import { calendar } from "./routes/calendar";
 import { chat } from "./routes/chat";
 import { files } from "./routes/files";
@@ -26,6 +27,7 @@ app.get("/health", (c) => c.json({ ok: true }));
 app.route("/api", auth);
 app.route("/api", dashboard);
 app.route("/api", agentsRouter);
+app.route("/api", tasksRouter);
 app.notFound((c) => {
   return c.json({ error: "Not Found", path: c.req.path }, 404);
 });

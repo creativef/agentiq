@@ -92,8 +92,24 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
 // PUT /agents/:agentId
 agentsRouter.put("/agents/:agentId", async (c) => {
   const agentId = c.req.param("agentId");
+  const user: UserPayload = c.get("user");
   const body = await c.req.json();
-  // TODO: verify user has access to agent's company
+
+  // Verify user has access to agent's company
+  const agentCheck = await db
+    .select({ companyId: agents.companyId })
+    .from(agents)
+    .where(sql`${agents.id} = ${agentId}`)
+    .limit(1);
+  if (agentCheck.length === 0) {
+    return c.json({ error: "Agent not found" }, 404);
+  }
+  const access = await db
+    .select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${agentCheck[0].companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
   
   await db.update(agents).set({
     name: body.name,
@@ -108,6 +124,24 @@ agentsRouter.put("/agents/:agentId", async (c) => {
 // DELETE /agents/:agentId
 agentsRouter.delete("/agents/:agentId", async (c) => {
   const agentId = c.req.param("agentId");
+  const user: UserPayload = c.get("user");
+
+  // Verify user has access to agent's company
+  const agentCheck = await db
+    .select({ companyId: agents.companyId })
+    .from(agents)
+    .where(sql`${agents.id} = ${agentId}`)
+    .limit(1);
+  if (agentCheck.length === 0) {
+    return c.json({ error: "Agent not found" }, 404);
+  }
+  const access = await db
+    .select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${agentCheck[0].companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
   await db.delete(agents).where(sql`${agents.id} = ${agentId}`);
   return c.json({ ok: true });
 });

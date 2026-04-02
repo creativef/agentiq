@@ -30,7 +30,7 @@ services:
       - "5173:5173"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/missioncontrol
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET}
     volumes:
       - .:/app
       - /app/node_modules
