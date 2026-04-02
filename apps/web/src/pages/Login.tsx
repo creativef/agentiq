@@ -1,28 +1,31 @@
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function Login() {
-  const { login, register } = useAuth();
+  const { user, login, register } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [company, setCompany] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState("");
+
+  // Redirect when user becomes set
+  useEffect(() => {
+    if (user) navigate("/dashboard", { replace: true });
+  }, [user, navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
-    setSuccess("");
     setLoading(true);
     try {
       if (mode === "login") {
         await login(email, pass);
-        setSuccess("Logged in!");
       } else {
         await register(email, pass, company);
-        setSuccess("Registered and logged in!");
       }
     } catch (err: any) {
       setError(err.message);
@@ -38,10 +41,6 @@ export default function Login() {
         
         {error && <div style={{ padding: "8px", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: "4px", marginBottom: "8px", color: "#fca5a5" }}>
           {error}
-        </div>}
-        
-        {success && <div style={{ padding: "8px", background: "#052e16", border: "1px solid #166534", borderRadius: "4px", marginBottom: "8px", color: "#86efac" }}>
-          {success}
         </div>}
         
         <input
@@ -79,7 +78,7 @@ export default function Login() {
 
         <p
           style={{ textAlign: "center", marginTop: "1rem", fontSize: "0.8rem", cursor: "pointer", color: "#93c5fd" }}
-          onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setSuccess(""); }}
+          onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}
         >
           {mode === "login" ? "New? Create account" : "Back to login"}
         </p>
