@@ -1,4 +1,4 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
+import { Outlet, Link, useLocation } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { useState } from "react";
 
@@ -37,7 +37,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       
       {/* Main */}
       <main style={{ flex: 1, overflow: "auto" }}>
-        {children || <Outlet />}
+        {children}
       </main>
     </div>
   );
