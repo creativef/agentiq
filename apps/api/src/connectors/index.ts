@@ -1,15 +1,24 @@
 // Connector Registry — platform-agnostic connector framework
 // Each platform (Hermes, OpenClaw, etc.) implements this interface.
-// Adding a new platform = add one file + register it. Zero route changes.
+// Adding a new platform = add one file + register it here. Zero route changes.
 
 export interface ConnectorDef {
   platform: string;
   displayName: string;
   description: string;
   icon: string;
-  normalizeEvent: (raw: any) => NormalizedEvent;
-  validateWebhook: (raw: any, headers: Record<string, string>, secret: string) => boolean;
+  // Does this connector need any user config at all?
+  requiresSetup: boolean;
+  // What fields does the user need to provide? (empty for built-in platforms)
   configFields: ConfigField[];
+  // Normalize raw webhook payload into our canonical event format
+  normalizeEvent: (raw: any) => NormalizedEvent;
+  // Validate incoming webhook auth
+  validateWebhook: (raw: any, headers: Record<string, string>, secret: string) => boolean;
+  // Optional: poll the platform to discover agents
+  discoverAgents?: (config: Record<string, string>) => Promise<DiscoveredAgent[]>;
+  // Optional: auto-configure connection (e.g. register webhook on remote platform)
+  autoConfigure?: (config: Record<string, string>) => Promise<AutoConfigResult>;
 }
 
 export interface NormalizedEvent {
@@ -27,9 +36,21 @@ export interface ConfigField {
   required?: boolean;
 }
 
+export interface DiscoveredAgent {
+  id: string;
+  name: string;
+  role?: string;
+  status?: string;
+}
+
+export interface AutoConfigResult {
+  webhookUrl: string;
+  webhookSecret: string;
+  message?: string;
+}
+
 // ============================================================
-// REGISTER CONNECTORS HERE
-// To add a new platform: implement ConnectorDef, then add it below.
+// REGISTER CONNECTORS
 // ============================================================
 
 import { hermesConnector } from "./hermes";
@@ -41,15 +62,17 @@ export const connectorRegistry: Record<string, ConnectorDef> = {
 };
 
 export function listAvailablePlatforms() {
-  return Object.values(connectorRegistry).map((c) => ({
-    platform: c.platform,
-    displayName: c.displayName,
-    description: c.description,
-    icon: c.icon,
-    configFields: c.configFields,
-  }));
+  return Object.values(connectorRegistry).map((c) => {
+    const { normalizeEvent, validateWebhook, discoverAgents, autoConfigure, ...publicFields } = c;
+    return publicFields;
+  });
 }
 
 export function getConnector(platform: string): ConnectorDef | undefined {
   return connectorRegistry[platform];
+}
+
+export function isPlatformBuiltIn(platform: string): boolean {
+  const conn = connectorRegistry[platform];
+  return conn ? !conn.requiresSetup : false;
 }
