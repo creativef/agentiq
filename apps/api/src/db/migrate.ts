@@ -55,6 +55,7 @@ async function main() {
         last_heartbeat TIMESTAMP,
         cost_monthly INT DEFAULT 0,
         budget_limit INT,
+        reports_to UUID REFERENCES agents(id),
         created_at TIMESTAMP DEFAULT NOW()
       )
     `],

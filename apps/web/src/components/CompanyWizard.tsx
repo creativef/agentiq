@@ -81,25 +81,55 @@ export default function CompanyWizard({ onComplete, onCancel }: CompanyWizardPro
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      // Build agent list from templates + custom
-      const agents = selectedAgents
+      // Build agent list from templates + custom WITH reporting hierarchy
+      const templateAgents = selectedAgents
         .map(key => {
           const tmpl = agentTemplates.find(t => t.key === key);
           if (!tmpl) return null;
-          // Use template name, but append a suffix if there are duplicates
           const count = selectedAgents.filter(k => k === key).length;
           const suffix = count > 1 ? ` ${count}` : "";
-          return { name: tmpl.name + suffix, role: tmpl.role };
+          return { name: tmpl.name + suffix, role: tmpl.role, templateKey: tmpl.key };
         })
-        .filter(Boolean)
-        .concat(customAgents.map(ca => ({ name: ca.name, role: ca.role })));
+        .filter(Boolean);
+
+      const allAgents = [
+        ...templateAgents,
+        ...customAgents.map(ca => ({ name: ca.name, role: ca.role, templateKey: "custom" })),
+      ];
+
+      // Resolve reporting chain
+      // CEO → Founder | Manager → CEO | Agents → Manager (fallback CEO) | Founder
+      const hasRole = (role: string) => allAgents.some(a => a.role === role);
+      let reportsToMap = new Map();
+
+      // Set up reporting based on roles
+      for (const agent of allAgents) {
+        if (agent.role === "FOUNDER") {
+          reportsToMap.set(agent.templateKey, null); // Founder reports to no one
+        } else if (agent.role === "CEO") {
+          reportsToMap.set(agent.templateKey, hasRole("FOUNDER") ? "FOUNDER" : null);
+        } else if (agent.role === "MANAGER") {
+          reportsToMap.set(agent.templateKey, hasRole("CEO") ? "CEO" : hasRole("FOUNDER") ? "FOUNDER" : null);
+        } else {
+          // Agents report to first available: Manager → CEO → Founder
+          reportsToMap.set(agent.templateKey,
+            hasRole("MANAGER") ? "MANAGER" : hasRole("CEO") ? "CEO" : hasRole("FOUNDER") ? "FOUNDER" : null);
+        }
+      }
+
+      const agentsPayload = allAgents.map(a => ({
+        name: a.name,
+        role: a.role,
+        reportsToRole: reportsToMap.get(a.templateKey), // Will be resolved backend-side
+        templateKey: a.templateKey,
+      }));
 
       const body = {
         name: companyName.trim(),
         description: companyDescription.trim() || null,
         industry: industry || null,
         projects: allProjects,
-        agents,
+        agents: agentsPayload,
       };
 
       const res = await fetch("/api/companies", {

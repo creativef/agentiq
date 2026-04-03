@@ -62,17 +62,34 @@ dashboard.post("/companies", async (c) => {
     createdProjectIds.push(proj[0].id);
   }
 
-  // Create agents (assign to first project)
+  // Create agents with reporting hierarchy
   const firstProjectId = createdProjectIds[0];
   if (agentDefs && agentDefs.length > 0) {
+    // First pass: create agents WITHOUT reportsTo, track by templateKey
+    const createdAgents = new Map();
+    
     for (const agent of agentDefs) {
-      await db.insert(agents).values({
+      const result = await db.insert(agents).values({
         companyId,
         projectId: firstProjectId,
         name: agent.name || "Agent",
         role: agent.role || "AGENT",
         status: "idle",
       }).returning();
+      createdAgents.set(agent.templateKey || agent.name, result[0]);
+    }
+
+    // Second pass: resolve reportsTo roles into agent IDs and update
+    for (const agent of agentDefs) {
+      if (agent.reportsToRole) {
+        const managerAgent = createdAgents.get(agent.reportsToRole);
+        const thisAgent = createdAgents.get(agent.templateKey || agent.name);
+        if (managerAgent && thisAgent) {
+          await db.update(agents)
+            .set({ reportsTo: managerAgent.id })
+            .where(sql`${agents.id} = ${thisAgent.id}`);
+        }
+      }
     }
   } else {
     // Fallback: create default Founder agent

@@ -54,6 +54,7 @@ export const agents = pgTable("agents", {
   lastHeartbeat: timestamp("last_heartbeat"),
   costMonthly: integer("cost_monthly").default(0),
   budgetLimit: integer("budget_limit"),
+  reportsTo: uuid("reports_to"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

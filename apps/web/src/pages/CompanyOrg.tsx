@@ -1,110 +1,99 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
-interface Person {
+interface AgentNode {
   id: string;
   name: string;
   role: string;
   status: string;
+  reportsTo: string | null;
+  children: AgentNode[];
 }
 
 export default function CompanyOrg() {
   const { company } = useAuth();
-  const [people, setPeople] = useState<Person[]>([]);
+  const [tree, setTree] = useState<AgentNode[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!company) return;
-    fetch(`/api/companies/${company.id}/agents`, { credentials: "include" })
+    fetch(`/api/companies/${company.id}/tree`, { credentials: "include" })
       .then(r => r.json())
-      .then(d => setPeople(d.agents || []))
+      .then(d => {
+        setTree(d.tree || []);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [company]);
 
-  const founders = people.filter(p => p.role === "FOUNDER");
-  const ceos = people.filter(p => p.role === "CEO");
-  const managers = people.filter(p => p.role === "MANAGER");
-  const agents = people.filter(p => p.role === "AGENT");
-
   if (loading) return <div style={{ padding: "2rem", color: "#888" }}>Loading...</div>;
 
-  const renderPerson = (p: Person) => (
-    <div key={p.id} style={{ background: "#1f2937", padding: "1rem", borderRadius: "8px", border: p.role === "FOUNDER" ? "2px solid #f59e0b" : "1px solid #374151", textAlign: "center", minWidth: "150px" }}>
-      <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: p.role === "FOUNDER" ? "#f59e0b" : "#3b82f6", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto", fontSize: "1.5rem" }}>&#128101;</div>
-      <div style={{ fontWeight: "bold", marginTop: "8px" }}>{p.name}</div>
-      <div style={{ fontSize: "0.8rem", color: p.role === "FOUNDER" ? "#f59e0b" : "#3b82f6" }}>
-        {p.role === "FOUNDER" ? "Founder" : p.role === "CEO" ? "CEO" : p.role === "MANAGER" ? "Manager" : "Agent"}
+  if (!company) return <p style={{ padding: "2rem", color: "#888" }}>No company selected.</p>;
+
+  const roleIcon = (role: string) => {
+    if (role === "FOUNDER") return "🚀";
+    if (role === "CEO") return "👔";
+    if (role === "MANAGER") return "📋";
+    return "🤖";
+  };
+
+  const renderTree = (nodes: AgentNode[], depth: number) => {
+    if (nodes.length === 0) return null;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: depth === 0 ? "2rem" : "1rem" }}>
+        {nodes.map(node => (
+          <div key={node.id} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{
+              background: "#1f2937",
+              padding: "0.75rem 1.25rem",
+              borderRadius: "12px",
+              border: node.role === "FOUNDER" ? "2px solid #f59e0b" : "1px solid #374151",
+              textAlign: "center",
+              minWidth: "120px",
+            }}>
+              <div style={{ fontSize: "1.5rem" }}>{roleIcon(node.role)}</div>
+              <div style={{ fontWeight: "bold", fontSize: "0.9rem" }}>{node.name}</div>
+              <div style={{ fontSize: "0.7rem", color: "#9ca3af" }}>{node.role}</div>
+              <div style={{ fontSize: "0.65rem", color: "#22c55e", textTransform: "capitalize", marginTop: "2px" }}>{node.status}</div>
+            </div>
+            {node.children.length > 0 && (
+              <>
+                <div style={{ width: "1px", height: "16px", background: "#4B5563", margin: "0 auto" }} />
+                <div style={{ display: "flex", gap: "1rem", alignItems: "start" }}>
+                  {node.children.length > 1 && (
+                    <div style={{
+                      height: "1px",
+                      background: "#4B5563",
+                      width: `${node.children.length * 140}px`,
+                      maxWidth: "80vw",
+                    }} />
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", justifyContent: "center" }}>
+                  {renderTree(node.children, depth + 1)}
+                </div>
+              </>
+            )}
+          </div>
+        ))}
       </div>
-      <div style={{ fontSize: "0.7rem", color: "#22c55e", textTransform: "capitalize", marginTop: "2px" }}>{p.status}</div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={{ padding: "1.5rem" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", marginBottom: "1rem" }}>Org Chart{ company ? ` — ${company.name}` : "" }</h1>
+      <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", marginBottom: "1rem" }}>
+        Organization Chart — {company.name}
+      </h1>
 
-      {people.length === 0 ? (
+      {tree.length === 0 ? (
         <div style={{ textAlign: "center", padding: "3rem", color: "#6b7280" }}>
-          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>&#127970;</div>
-          <p>No organization members yet.</p>
+          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🏢</div>
+          <p>No agents in this company yet.</p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1.5rem" }}>
-          {/* Founder level */}
-          {founders.length > 0 && (
-            <div>
-              <div style={{ fontSize: "0.7rem", color: "#f59e0b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem", textAlign: "center" }}>Founder</div>
-              <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center" }}>
-                {founders.map(renderPerson)}
-              </div>
-            </div>
-          )}
-
-          {/* Arrow */}
-          {(founders.length > 0 || ceos.length > 0) && (
-            <div style={{ fontSize: "1.5rem", color: "#6b7280" }}>&#10095;</div>
-          )}
-
-          {/* CEO level */}
-          {ceos.length > 0 && (
-            <div>
-              <div style={{ fontSize: "0.7rem", color: "#3b82f6", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem", textAlign: "center" }}>Chief Executive</div>
-              <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center" }}>
-                {ceos.map(renderPerson)}
-              </div>
-            </div>
-          )}
-
-          {/* Arrow */}
-          {(ceos.length > 0 || founders.length > 0) && managers.length > 0 && (
-            <div style={{ fontSize: "1.5rem", color: "#6b7280" }}>&#10095;</div>
-          )}
-
-          {/* Manager level */}
-          {managers.length > 0 && (
-            <div>
-              <div style={{ fontSize: "0.7rem", color: "#8b5cf6", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem", textAlign: "center" }}>Managers</div>
-              <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center" }}>
-                {managers.map(renderPerson)}
-              </div>
-            </div>
-          )}
-
-          {/* Arrow */}
-          {(managers.length > 0 || ceos.length > 0) && agents.length > 0 && (
-            <div style={{ fontSize: "1.5rem", color: "#6b7280" }}>&#10095;</div>
-          )}
-
-          {/* Agent level */}
-          {agents.length > 0 && (
-            <div>
-              <div style={{ fontSize: "0.7rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem", textAlign: "center" }}>Agents</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", justifyContent: "center" }}>
-                {agents.map(renderPerson)}
-              </div>
-            </div>
-          )}
+        <div style={{ overflow: "auto", paddingBottom: "2rem" }}>
+          {renderTree(tree, 0)}
         </div>
       )}
     </div>

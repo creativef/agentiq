@@ -12,6 +12,8 @@ interface AgentItem {
   heartbeatInterval: number | null;
   createdAt: string;
   platform: string | null;
+  projectId: string | null;
+  reportsTo: string | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -28,7 +30,7 @@ export default function AgentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AgentItem | null>(null);
   const [form, setForm] = useState({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600" });
-  const [editForm, setEditForm] = useState({ name: "", status: "", budgetLimit: "", heartbeatInterval: "" });
+  const [editForm, setEditForm] = useState({ name: "", status: "", budgetLimit: "", heartbeatInterval: "", reportsTo: "" });
 
   const fetchAgents = () => {
     if (!company) return;
@@ -74,6 +76,7 @@ export default function AgentsPage() {
       status: agent.status,
       budgetLimit: agent.budgetLimit ? String(agent.budgetLimit) : "",
       heartbeatInterval: agent.heartbeatInterval ? String(agent.heartbeatInterval) : "3600",
+      reportsTo: agent.reportsTo || "",
     });
   };
 
@@ -88,6 +91,7 @@ export default function AgentsPage() {
         status: editForm.status || undefined,
         budgetLimit: editForm.budgetLimit ? Number(editForm.budgetLimit) : null,
         heartbeatInterval: Number(editForm.heartbeatInterval),
+        reportsTo: editForm.reportsTo || null,
       }),
     });
     setEditing(null);
@@ -196,6 +200,15 @@ export default function AgentsPage() {
                       <option value="300">Every 5 min</option>
                       <option value="3600">Every hour</option>
                       <option value="86400">Daily</option>
+                    </select>
+                    <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "4px" }}>Reports to</div>
+                    <select value={editForm.reportsTo} onChange={e => setEditForm({...editForm, reportsTo: e.target.value})} style={{ width: "100%", padding: "6px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", marginBottom: "4px" }}>
+                      <option value="">— No one (top-level) —</option>
+                      {agents
+                        .filter(a => a.id !== editing?.id)
+                        .map(a => (
+                          <option key={a.id} value={a.id}>{a.role === "FOUNDER" ? "🚀 " : a.role === "CEO" ? "👔 " : ""}{a.name} ({a.role})</option>
+                        ))}
                     </select>
                   </div>
                   <div style={{ display: "flex", gap: "0.5rem" }}>

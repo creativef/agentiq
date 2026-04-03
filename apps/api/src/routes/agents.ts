@@ -56,6 +56,7 @@ agentsRouter.get("/companies/:companyId/agents", async (c) => {
       createdAt: agents.createdAt,
       heartbeatInterval: agents.heartbeatInterval,
       platform: agents.platform,
+      reportsTo: agents.reportsTo,
     })
     .from(agents)
     .where(sql`${agents.companyId} = ${companyId}`);
@@ -92,6 +93,7 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
     status: "idle",
     budgetLimit: body.budgetLimit || null,
     heartbeatInterval: body.heartbeatInterval || 3600,
+    reportsTo: body.reportsTo || null,
   }).returning();
 
   return c.json({ agent: newAgent[0] });
@@ -124,6 +126,7 @@ agentsRouter.put("/agents/:agentId", async (c) => {
     status: body.status,
     budgetLimit: body.budgetLimit,
     heartbeatInterval: body.heartbeatInterval,
+    reportsTo: body.reportsTo !== undefined ? body.reportsTo : undefined,
   }).where(sql`${agents.id} = ${agentId}`);
 
   return c.json({ ok: true });
@@ -152,6 +155,46 @@ agentsRouter.delete("/agents/:agentId", async (c) => {
 
   await db.delete(agents).where(sql`${agents.id} = ${agentId}`);
   return c.json({ ok: true });
+});
+
+// GET /companies/:companyId/tree — hierarchical org chart
+agentsRouter.get("/companies/:companyId/tree", async (c) => {
+  const companyId = c.req.param("companyId");
+  const user: UserPayload = c.get("user");
+  const access = await db.select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  const allAgents = await db
+    .select({
+      id: agents.id,
+      name: agents.name,
+      role: agents.role,
+      status: agents.status,
+      reportsTo: agents.reportsTo,
+    })
+    .from(agents)
+    .where(sql`${agents.companyId} = ${companyId}`);
+
+  // Build tree: group by reportsTo
+  const agentMap = new Map();
+  const roots = [];
+
+  for (const a of allAgents) {
+    agentMap.set(a.id, { ...a, children: [] });
+  }
+  for (const a of allAgents) {
+    const node = agentMap.get(a.id);
+    if (a.reportsTo && agentMap.has(a.reportsTo)) {
+      agentMap.get(a.reportsTo).children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return c.json({ tree: roots, all: agentMap });
 });
 
 export { agentsRouter };
