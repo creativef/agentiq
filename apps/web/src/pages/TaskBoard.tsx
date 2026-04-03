@@ -26,7 +26,7 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function TaskBoard() {
-  const { company } = useAuth();
+  const { company, project } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
