@@ -1,0 +1,120 @@
+{
+  "generated_at": "2026-04-02",
+  "commit": "5bfc9f4",
+  "audit_scope": "full-codebase",
+  "runtime_verified": false,
+  "features": [
+    {
+      "name": "Authentication (login/register/logout/me)",
+      "status": "fully_functional",
+      "confidence": "high",
+      "evidence": "auth.ts has full CRUD with bcrypt, JWT in httpOnly cookies. AuthContext.tsx wires login/register/logout/logout. ProtectedRoute gates all dashboard routes.",
+      "blockers": null,
+      "recommended_next_step": "Add input validation (zod) for email format and password strength."
+    },
+    {
+      "name": "Dashboard (KPIs, status wall, activity timeline)",
+      "status": "fully_functional",
+      "confidence": "high",
+      "evidence": "dashboard.ts computes stats/agents/events from DB. DashboardPage.tsx fetches and renders KPIs, agent status tiles, event timeline. Routing is nested and correct.",
+      "blockers": null,
+      "recommended_next_step": "Add error handling UI for failed fetches."
+    },
+    {
+      "name": "Company Management (list, create, switch)",
+      "status": "fully_functional",
+      "confidence": "high",
+      "evidence": "GET/POST /companies in dashboard.ts. Company switcher in DashboardLayout and DashboardPage. AuthContext loads companies on mount.",
+      "blockers": null,
+      "recommended_next_step": null
+    },
+    {
+      "name": "Agents (list/create/update/delete)",
+      "status": "fully_functional",
+      "confidence": "high",
+      "evidence": "agents.ts has full CRUD with authz checks (company membership verified). AgentsPage.tsx has 150-line component with create form, status controls, delete. PUT/DELETE now have authz checks (P0 fix applied).",
+      "blockers": null,
+      "recommended_next_step": "Remove window.location.reload() after create, use optimistic state update."
+    },
+    {
+      "name": "Tasks (kanban CRUD, drag-drop)",
+      "status": "fully_functional",
+      "confidence": "high",
+      "evidence": "tasks.ts has full CRUD. TaskBoard.tsx has kanban with 5 columns, drag-drop, create form, delete. Tasks route mounted in index.ts (P0 fix applied).",
+      "blockers": null,
+      "recommended_next_step": null
+    },
+    {
+      "name": "Calendar & Meetings",
+      "status": "non_functional",
+      "confidence": "high",
+      "evidence": "CalendarMeetings.tsx is a complete 77-line component with month grid and event form. BUT: calendar.ts only has POST /meetings -> {ok: true}. Frontend calls GET /api/calendar (wrong path). Route is not mounted in index.ts. Form onSubmit is e.preventDefault() only.",
+      "blockers": "Missing calendar_events DB table, missing GET endpoint, route not mounted, form submission stub",
+      "recommended_next_step": "Create calendar_events table, add GET /calendar and POST /calendar endpoints, mount route, wire form submission. T-01, T-02, T-06."
+    },
+    {
+      "name": "Chat & Journal",
+      "status": "non_functional",
+      "confidence": "high",
+      "evidence": "ChatJournal.tsx is complete (110 lines) with chat messages and journal tabs. BUT: chat.ts has POST /chat -> {ok: true} only (no GET). journal.ts: GET /journal -> {ok: true}. Neither route is mounted. No chat_messages or journal_entries tables exist.",
+      "blockers": "Missing DB tables (chat_messages, journal_entries), routes not mounted, no GET for chat, no POST for journal",
+      "recommended_next_step": "Create DB tables, implement GET/POST for both, mount routes. T-01, T-07, T-08."
+    },
+    {
+      "name": "File Hub",
+      "status": "non_functional",
+      "confidence": "high",
+      "evidence": "FileHub.tsx is complete (93 lines) with upload UI, file list, size formatting. BUT: files.ts has POST /files -> {ok: true} only. No file storage, no GET endpoint. Route not mounted.",
+      "blockers": "No file storage layer, no files metadata table, route not mounted",
+      "recommended_next_step": "Decide storage strategy (local vs cloud), create files table, implement GET/POST with multipart, mount route. T-01, T-09."
+    },
+    {
+      "name": "Org Chart",
+      "status": "partially_operational",
+      "confidence": "high",
+      "evidence": "CompanyOrg.tsx renders hierarchical view (CEO -> Manager -> Agent). Fetches from /companies/:id/agents (reuses agents endpoint). Only shows AI agents, not real people/company_members.",
+      "blockers": "No distinction between agents and human members. company_members table not exposed.",
+      "recommended_next_step": "Either extend agents to include human roles or create dedicated members endpoint."
+    },
+    {
+      "name": "Company Settings",
+      "status": "partially_operational",
+      "confidence": "high",
+      "evidence": "CompanySettings.tsx has company info form (name, goal) and member list. Save button shows fake toast. Member list shows companies[] instead of users. No PUT /companies/:id endpoint exists. Invite is alert().",
+      "blockers": "No PUT companies endpoint, no dedicated members endpoint, members populated with wrong data",
+      "recommended_next_step": "Implement PUT /companies/:id, GET /companies/:id/members, fix member population. T-04, T-05."
+    },
+    {
+      "name": "OpenClaw Connector",
+      "status": "partially_operational",
+      "confidence": "high",
+      "evidence": "POST /connectors/openclaw is mounted and secured (webhook secret header check, companyId extraction, normalizeEvent). pollGateway returns [] (stub). No UI for configuration.",
+      "blockers": "pollGateway is stub. OPENCLAW_WEBHOOK_SECRET must be set in env (not in repo).",
+      "recommended_next_step": "Implement actual OpenClaw polling. Add webhook secret to deployment env vars."
+    },
+    {
+      "name": "Goals",
+      "status": "not_implemented",
+      "confidence": "high",
+      "evidence": "goals table exists in DB (schema.ts line 67-75). No API routes. Dashboard.ts queries goals table for progress calc but no way to create/update goals from frontend.",
+      "blockers": "No API routes, no UI",
+      "recommended_next_step": "Create goals CRUD API and connect to Dashboard or Company Settings."
+    },
+    {
+      "name": "Realtime Events",
+      "status": "not_implemented",
+      "confidence": "high",
+      "evidence": "realtime.ts: GET /events returns empty string ''. Route not mounted. No SSE/WebSocket implementation.",
+      "blockers": "No implementation, not mounted, not used by any frontend page",
+      "recommended_next_step": "Either implement SSE/EventSource or remove the stub."
+    },
+    {
+      "name": "Data Queries (raw companies/events)",
+      "status": "partially_operational",
+      "confidence": "high",
+      "evidence": "data.ts has GET /companies and GET /events. Now secured with authMiddleware (P0 fix). Only used by orphaned CompanyPanel.tsx and Sidebar.tsx (not rendered in app).",
+      "blockers": "Endpoints serve orphaned components only",
+      "recommended_next_step": "Remove if truly unused, or wire into overview dashboard components."
+    }
+  ]
+}
