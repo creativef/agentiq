@@ -111,15 +111,18 @@ export default function AgentsPage() {
 
   if (loading) return <div style={{ padding: "2rem", color: "#888" }}>Loading...</div>;
 
-  // Sort: founders (role=CEO) at top, then by name
+  // Sort: founders (role=FOUNDER) at top, then CEO, then by name
   const sorted = [...agents].sort((a, b) => {
+    if (a.role === "FOUNDER" && b.role !== "FOUNDER") return -1;
+    if (a.role !== "FOUNDER" && b.role === "FOUNDER") return 1;
     if (a.role === "CEO" && b.role !== "CEO") return -1;
     if (a.role !== "CEO" && b.role === "CEO") return 1;
     return a.name.localeCompare(b.name);
   });
 
   const roleLabel = (role: string) => {
-    if (role === "CEO") return "Founder / CEO";
+    if (role === "FOUNDER") return "Founder";
+    if (role === "CEO") return "CEO";
     if (role === "MANAGER") return "Manager";
     return role;
   };
@@ -131,7 +134,7 @@ export default function AgentsPage() {
           Agents
           <span className="tooltip-trigger">
             ?
-            <span className="tooltip-bubble">AI agents are autonomous workers that execute tasks for your company. Each agent has a role, status, and budget. Founders (CEO) are shown at the top.</span>
+            <span className="tooltip-bubble">AI agents are autonomous workers that execute tasks for your company. Each agent has a role, status, and budget. Founder is always at the top.</span>
           </span>
         </h1>
         <button onClick={() => setShowForm(!showForm)} style={{ padding: "8px 16px", background: "#3b82f6", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>
@@ -145,7 +148,8 @@ export default function AgentsPage() {
             <input autoFocus required placeholder="Agent name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
             <select value={form.role} onChange={e => setForm({...form, role: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
               <option value="AGENT">Agent</option>
-              <option value="CEO">Founder / CEO</option>
+              <option value="FOUNDER">Founder</option>
+              <option value="CEO">CEO</option>
               <option value="MANAGER">Manager</option>
             </select>
             <input type="number" placeholder="Budget limit ($)" value={form.budgetLimit} onChange={e => setForm({...form, budgetLimit: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
@@ -172,8 +176,8 @@ export default function AgentsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1rem" }}>
           {sorted.map(a => (
             <div key={a.id} style={{
-              background: "#1f2937", borderRadius: "8px", padding: "1rem", border: a.role === "CEO" ? "1px solid #f59e0b" : "1px solid #374151",
-              borderLeft: `4px solid ${a.role === "CEO" ? "#f59e0b" : statusColors[a.status] || "#6b7280"}`
+              background: "#1f2937", borderRadius: "8px", padding: "1rem", border: a.role === "FOUNDER" ? "1px solid #f59e0b" : "1px solid #374151",
+              borderLeft: `4px solid ${a.role === "FOUNDER" ? "#f59e0b" : statusColors[a.status] || "#6b7280"}`
             }}>
               {editing?.id === a.id ? (
                 <div>
@@ -205,10 +209,10 @@ export default function AgentsPage() {
                     <div>
                       <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>
                         {a.name}
-                        {a.role === "CEO" && (
+                        {a.role === "FOUNDER" && (
                           <span className="tooltip-trigger" style={{ fontSize: "8px", marginLeft: "6px" }}>
                             ★
-                            <span className="tooltip-bubble">This agent is the Founder / CEO of your company. It should be listed first in the org chart.</span>
+                            <span className="tooltip-bubble">This person is the Founder of your company. It should be listed first in the org chart.</span>
                           </span>
                         )}
                       </div>

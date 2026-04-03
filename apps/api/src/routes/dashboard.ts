@@ -43,7 +43,7 @@ dashboard.post("/companies", async (c) => {
   const companyId = newComp[0].id;
   await db.insert(companyMembers).values({ companyId, userId: user.userId, role: "OWNER" });
   const proj = await db.insert(projects).values({ companyId, name: "General Operations" }).returning();
-  await db.insert(agents).values({ companyId, projectId: proj[0].id, name: "Ops Agent", role: "CEO", status: "idle" }).returning();
+  await db.insert(agents).values({ companyId, projectId: proj[0].id, name: "Founder", role: "FOUNDER", status: "idle" }).returning();
   return c.json({ company: { id: companyId, name, goal, role: "OWNER" } });
 });
 

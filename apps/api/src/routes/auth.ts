@@ -73,7 +73,7 @@ auth.post("/auth/register", async (c) => {
         // Seed Default Project & Agent
         const proj = await db.insert(projects).values({ companyId, name: "General Operations" }).returning();
         const projId = proj[0].id;
-        await db.insert(agents).values({ companyId, projectId: projId, name: "Ops Agent", role: "AGENT" }).returning();
+        await db.insert(agents).values({ companyId, projectId: projId, name: "Founder", role: "FOUNDER" }).returning();
     }
 
     const token = await sign({ userId, email, role: "OWNER", exp: Math.floor(Date.now() / 1000) + 86400 * 30 }, JWT_SECRET);
