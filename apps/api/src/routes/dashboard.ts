@@ -27,13 +27,24 @@ dashboard.get("/companies", async (c) => {
 // POST /companies - create a new company
 dashboard.post("/companies", async (c) => {
   const user: UserPayload = c.get("user");
-  const body = await c.req.json();
-  const newComp = await db.insert(companies).values({ name: body.name, goal: body.goal || "Default Goal" }).returning();
+  const body = await c.req.json().catch(() => ({}));
+
+  if (!body.name || typeof body.name !== "string" || body.name.trim().length === 0) {
+    return c.json({ error: "Company name is required" }, 400);
+  }
+  if (body.name.length > 200) {
+    return c.json({ error: "Company name too long (max 200 chars)" }, 400);
+  }
+
+  const name = body.name.trim();
+  const goal = (body.goal && typeof body.goal === "string") ? body.goal : "Building something amazing";
+
+  const newComp = await db.insert(companies).values({ name, goal }).returning();
   const companyId = newComp[0].id;
   await db.insert(companyMembers).values({ companyId, userId: user.userId, role: "OWNER" });
   const proj = await db.insert(projects).values({ companyId, name: "General Operations" }).returning();
   await db.insert(agents).values({ companyId, projectId: proj[0].id, name: "Ops Agent", role: "AGENT", status: "idle" }).returning();
-  return c.json({ company: { id: companyId, name: body.name, goal: "Default Goal", role: "OWNER" } });
+  return c.json({ company: { id: companyId, name, goal, role: "OWNER" } });
 });
 
 // GET /companies/:id/dashboard - overview for a specific company

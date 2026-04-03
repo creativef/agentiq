@@ -12,8 +12,27 @@ const auth = new Hono();
 
 auth.post("/auth/register", async (c) => {
   try {
-    const body = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
     const { email, password, companyName } = body;
+
+    // Validate email format
+    if (!email || typeof email !== "string" || !email.includes("@")) {
+      return c.json({ error: "Valid email is required" }, 400);
+    }
+
+    // Validate password strength
+    if (!password || typeof password !== "string" || password.length < 8) {
+      return c.json({ error: "Password must be at least 8 characters" }, 400);
+    }
+    if (!/[A-Z]/.test(password)) {
+      return c.json({ error: "Password must contain an uppercase letter" }, 400);
+    }
+    if (!/[a-z]/.test(password)) {
+      return c.json({ error: "Password must contain a lowercase letter" }, 400);
+    }
+    if (!/[0-9]/.test(password)) {
+      return c.json({ error: "Password must contain a number" }, 400);
+    }
 
     // Check existing
     const existing = await db.select().from(users).where(sql`email = ${email}`).limit(1);

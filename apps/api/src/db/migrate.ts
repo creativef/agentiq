@@ -168,7 +168,32 @@ async function main() {
     }
   }
 
-  console.log("\nAll tables and columns ready!");
+  console.log("\nAll tables ready!");
+
+  // Add indexes on foreign keys and common query columns
+  console.log("\nCreating indexes...");
+  const indexes = [
+    ['idx_agents_company_id', 'CREATE INDEX IF NOT EXISTS idx_agents_company_id ON agents(company_id)'],
+    ['idx_agents_platform', 'CREATE INDEX IF NOT EXISTS idx_agents_platform ON agents(company_id, platform)'],
+    ['idx_tasks_project_id', 'CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)'],
+    ['idx_tasks_status', 'CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(project_id, status)'],
+    ['idx_events_company_id', 'CREATE INDEX IF NOT EXISTS idx_events_company_id ON events(company_id)'],
+    ['idx_events_created', 'CREATE INDEX IF NOT EXISTS idx_events_created ON events(company_id, created_at DESC)'],
+    ['idx_company_members_user', 'CREATE INDEX IF NOT EXISTS idx_company_members_user ON company_members(user_id)'],
+    ['idx_projects_company_id', 'CREATE INDEX IF NOT EXISTS idx_projects_company_id ON projects(company_id)'],
+    ['idx_connectors_company', 'CREATE INDEX IF NOT EXISTS idx_connectors_company ON connectors(company_id, platform)'],
+    ['idx_goals_company_id', 'CREATE INDEX IF NOT EXISTS idx_goals_company_id ON goals(company_id)'],
+  ];
+
+  for (const [name, stmt] of indexes) {
+    try {
+      await sql.unsafe(stmt);
+      console.log(`  [OK] ${name}`);
+    } catch (e: any) {
+      console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
+    }
+  }
+
   await sql.end();
 }
 

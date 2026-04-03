@@ -1,6 +1,9 @@
 import type { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
 import { verify } from "hono/utils/jwt/jwt";
+import { db } from "../db/client";
+import { users } from "../db/schema";
+import { sql } from "drizzle-orm";
 
 export const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production";
 
@@ -22,7 +25,19 @@ export const authMiddleware = async (c: Context, next: Next) => {
   }
   try {
     const payload = await verify(token, JWT_SECRET, "HS256");
-    c.set("user", payload);
+    c.set("user", payload as UserPayload);
+
+    // Guard: verify the user still exists in the database
+    const userExists = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(sql`${users.id} = ${(payload as UserPayload).userId}`)
+      .limit(1);
+    if (userExists.length === 0) {
+      // Cookie exists but user doesn't — stale session, return special code so frontend clears cookie and redirects
+      return c.json({ error: "Session expired", code: "USER_MISSING" }, 401);
+    }
+
     await next();
   } catch (e) {
     return c.json({ error: "Invalid token" }, 401);
