@@ -22,7 +22,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AgentsPage() {
-  const { company } = useAuth();
+  const { company, project } = useAuth();
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
