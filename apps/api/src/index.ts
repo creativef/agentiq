@@ -12,6 +12,7 @@ import { journal } from "./routes/journal";
 import { realtime } from "./routes/realtime";
 import { data } from "./routes/data";
 import { connectorsRouter } from "./routes/connectors";
+import { goalsRouter } from "./routes/goals";
 
 export const app = new Hono();
 
@@ -35,6 +36,7 @@ app.route("/api", journal);
 app.route("/api", realtime);
 app.route("/api", data);
 app.route("/api", connectorsRouter);
+app.route("/api", goalsRouter);
 
 app.notFound((c) => {
   return c.json({ error: "Not Found", path: c.req.path }, 404);

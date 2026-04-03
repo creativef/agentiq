@@ -6,11 +6,25 @@ import { sign } from "hono/jwt";
 import { db } from "../db/client";
 import { users, companies, companyMembers, projects, agents } from "../db/schema";
 import { authMiddleware, JWT_SECRET } from "../middleware/auth";
+import { rateLimitMiddleware } from "../middleware/rate-limiter";
 import { sql } from 'drizzle-orm';
 
 const auth = new Hono();
 
+function getClientIp(c: any): string {
+  return c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
+    || c.req.header("x-real-ip")
+    || c.req.raw.headers.get("cf-connecting-ip")
+    || "127.0.0.1";
+}
+
 auth.post("/auth/register", async (c) => {
+  const ip = getClientIp(c);
+  const limit = rateLimitMiddleware(ip);
+  if (!limit.allowed) {
+    return c.json({ error: `Too many attempts. Try again in ${limit.retryAfter} seconds` }, 429);
+  }
+
   try {
     const body = await c.req.json().catch(() => ({}));
     const { email, password, companyName } = body;
@@ -73,6 +87,12 @@ auth.post("/auth/register", async (c) => {
 });
 
 auth.post("/auth/login", async (c) => {
+  const ip = getClientIp(c);
+  const limit = rateLimitMiddleware(ip);
+  if (!limit.allowed) {
+    return c.json({ error: `Too many attempts. Try again in ${limit.retryAfter} seconds` }, 429);
+  }
+
   try {
     const body = await c.req.json();
     const { email, password } = body;
