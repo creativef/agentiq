@@ -74,10 +74,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!res.ok) throw new Error(data.error || "Registration failed");
     setUser(data.user);
     if (data.company) {
-      const nc: Company = { id: data.company.id, name: companyName, goal: "Default Goal", role: "OWNER" };
+      // API returns companyId as a string, not an object
+      const companyId = typeof data.company === "string" ? data.company : data.company.id;
+      const nc: Company = { id: companyId, name: companyName, goal: "Default Goal", role: "OWNER" };
       setCompanyState(nc);
       setCompanies([nc]);
-      localStorage.setItem("activeCompanyId", data.company.id);
+      localStorage.setItem("activeCompanyId", companyId);
       navigate("/dashboard", { replace: true });
     }
   };
