@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { skills, agentSkills, agents, companyMembers } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
+import { parseSkillsMarkdown } from "../utils/skillParser";
 
 export const skillsRouter = new Hono();
 skillsRouter.use(authMiddleware);
@@ -104,4 +105,102 @@ skillsRouter.delete("/agents/:agentId/skills/:agentSkillId", async (c) => {
 
   await db.delete(agentSkills).where(sql`${agentSkills.id} = ${agentSkillId}`);
   return c.json({ ok: true });
+});
+
+// POST /skills/import — parse a skills.md file and bulk-import skills
+skillsRouter.post("/skills/import", async (c) => {
+  const user: UserPayload = c.get("user");
+  const body = await c.req.json().catch(() => ({}));
+  
+  if (!body.content || typeof body.content !== "string") {
+    return c.json({ error: "Missing 'content' field (raw markdown string)" }, 400);
+  }
+
+  const parsed = parseSkillsMarkdown(body.content);
+  
+  if (parsed.length === 0) {
+    return c.json({ error: "No skills found. Use ## SkillName headings with metadata.", created: [] }, 400);
+  }
+
+  const created: any[] = [];
+  const skipped: string[] = [];
+
+  for (const skill of parsed) {
+    // Check if skill with same name already exists
+    const existing = await db.select().from(skills).where(sql`${skills.name} = ${skill.name}`).limit(1);
+    if (existing.length > 0) {
+      skipped.push(skill.name);
+      continue;
+    }
+
+    const result = await db.insert(skills).values({
+      name: skill.name,
+      category: skill.category,
+      description: skill.description || null,
+      instructions: skill.instructions,
+      icon: skill.icon || null,
+    }).returning();
+    created.push(result[0]);
+  }
+
+  return c.json({
+    parsed: parsed.length,
+    created: created.map(s => ({ id: s.id, name: s.name, category: s.category })),
+    skipped,
+  });
+});
+
+// POST /companies/:companyId/skills/import — import and assign all skills to company agents
+skillsRouter.post("/companies/:companyId/skills/import", async (c) => {
+  const companyId = c.req.param("companyId");
+  const user: UserPayload = c.get("user");
+  
+  const access = await db.select().from(companyMembers).where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`).limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  
+  if (!body.content || typeof body.content !== "string") {
+    return c.json({ error: "Missing 'content' field" }, 400);
+  }
+
+  const parsed = parseSkillsMarkdown(body.content);
+  
+  // Create skills not yet in DB
+  const skillIdMap = new Map<string, string>(); // name → id
+  for (const skill of parsed) {
+    const existing = await db.select().from(skills).where(sql`${skills.name} = ${skill.name}`).limit(1);
+    if (existing.length > 0) {
+      skillIdMap.set(skill.name, existing[0].id);
+    } else {
+      const result = await db.insert(skills).values({
+        name: skill.name,
+        category: skill.category,
+        description: skill.description || null,
+        instructions: skill.instructions,
+        icon: skill.icon || null,
+      }).returning();
+      skillIdMap.set(skill.name, result[0].id);
+    }
+  }
+
+  // Assign ALL parsed skills to ALL agents in this company
+  const companyAgents = await db.select({ id: agents.id }).from(agents).where(sql`${agents.companyId} = ${companyId}`);
+  let assigned = 0;
+  for (const agent of companyAgents) {
+    for (const [name, skillId] of skillIdMap) {
+      const exists = await db.select().from(agentSkills).where(sql`${agentSkills.agentId} = ${agent.id} AND ${agentSkills.skillId} = ${skillId}`).limit(1);
+      if (exists.length === 0) {
+        await db.insert(agentSkills).values({ agentId: agent.id, skillId });
+        assigned++;
+      }
+    }
+  }
+
+  return c.json({
+    skills: parsed.length,
+    agents: companyAgents.length,
+    assigned,
+    skillIds: Object.fromEntries(skillIdMap),
+  });
 });
