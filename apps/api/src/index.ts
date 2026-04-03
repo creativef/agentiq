@@ -28,6 +28,14 @@ app.route("/api", auth);
 app.route("/api", dashboard);
 app.route("/api", agentsRouter);
 app.route("/api", tasksRouter);
+app.route("/api", calendar);
+app.route("/api", chat);
+app.route("/api", files);
+app.route("/api", journal);
+app.route("/api", realtime);
+app.route("/api", openclaw);
+app.route("/api", data);
+
 app.notFound((c) => {
   return c.json({ error: "Not Found", path: c.req.path }, 404);
 });

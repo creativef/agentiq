@@ -73,3 +73,33 @@ export const goals = pgTable("goals", {
   progress: integer("progress").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Calendar Events
+export const calendarEvents = pgTable("calendar_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  title: text("title").notNull(),
+  date: text("date").notNull(),
+  time: text("time"),
+  agenda: text("agenda"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Chat Messages
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  userId: uuid("user_id").references(() => users.id),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Journal Entries
+export const journalEntries = pgTable("journal_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  userId: uuid("user_id").references(() => users.id),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});

@@ -90,6 +90,36 @@ async function main() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `],
+    [`calendar_events`, `
+      CREATE TABLE IF NOT EXISTS calendar_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id),
+        title TEXT NOT NULL,
+        date TEXT NOT NULL,
+        time TEXT,
+        agenda TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`chat_messages`, `
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id),
+        user_id UUID REFERENCES users(id),
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`journal_entries`, `
+      CREATE TABLE IF NOT EXISTS journal_entries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id),
+        user_id UUID REFERENCES users(id),
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
   ];
 
   for (const [name, stmt] of tables) {

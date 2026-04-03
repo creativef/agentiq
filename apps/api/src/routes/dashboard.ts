@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { companies, companyMembers, agents, tasks, events, projects, goals } from "../db/schema";
+import { companies, companyMembers, agents, tasks, events, projects, goals, users } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 
 const dashboard = new Hono();
@@ -85,6 +85,53 @@ dashboard.get("/companies/:companyId/dashboard", async (c) => {
     },
     timeline: recentEvents,
   });
+});
+
+// PUT /companies/:id - update company info
+dashboard.put("/companies/:companyId", async (c) => {
+  const user: UserPayload = c.get("user");
+  const companyId = c.req.param("companyId");
+  const access = await db
+    .select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  const body = await c.req.json();
+  await db.update(companies)
+    .set({
+      name: body.name,
+      goal: body.goal,
+    })
+    .where(sql`${companies.id} = ${companyId}`);
+
+  return c.json({ ok: true });
+});
+
+// GET /companies/:id/members - list members with user info
+dashboard.get("/companies/:companyId/members", async (c) => {
+  const user: UserPayload = c.get("user");
+  const companyId = c.req.param("companyId");
+  const access = await db
+    .select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  const members = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      role: companyMembers.role,
+      createdAt: companyMembers.createdAt,
+    })
+    .from(companyMembers)
+    .innerJoin(users, sql`${companyMembers.userId} = ${users.id}`)
+    .where(sql`${companyMembers.companyId} = ${companyId}`);
+
+  return c.json({ members });
 });
 
 export { dashboard };
