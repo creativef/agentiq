@@ -10,6 +10,7 @@ import ChatJournal from "./pages/ChatJournal";
 import FileHub from "./pages/FileHub";
 import CompanyOrg from "./pages/CompanyOrg";
 import CompanySettings from "./pages/CompanySettings";
+import ConnectorsPage from "./pages/ConnectorsPage";
 
 const ProtectedRoute = () => {
   const { user } = useAuth();
@@ -42,6 +43,9 @@ const AuthedApp = () => (
     </Route>
     <Route path="company" element={<DashboardLayout />}>
       <Route index element={<CompanySettings />} />
+    </Route>
+    <Route path="integrations" element={<DashboardLayout />}>
+      <Route index element={<ConnectorsPage />} />
     </Route>
   </Routes>
 );

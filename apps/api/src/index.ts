@@ -10,8 +10,8 @@ import { chat } from "./routes/chat";
 import { files } from "./routes/files";
 import { journal } from "./routes/journal";
 import { realtime } from "./routes/realtime";
-import { openclaw } from "./routes/openclaw";
 import { data } from "./routes/data";
+import { connectorsRouter } from "./routes/connectors";
 
 export const app = new Hono();
 
@@ -33,8 +33,8 @@ app.route("/api", chat);
 app.route("/api", files);
 app.route("/api", journal);
 app.route("/api", realtime);
-app.route("/api", openclaw);
 app.route("/api", data);
+app.route("/api", connectorsRouter);
 
 app.notFound((c) => {
   return c.json({ error: "Not Found", path: c.req.path }, 404);

@@ -10,6 +10,7 @@ const nav = [
   { path: "/files", label: "Files", icon: "&#128193;" },
   { path: "/chat", label: "Chat", icon: "&#128172;" },
   { path: "/org", label: "Org Chart", icon: "&#127970;" },
+  { path: "/integrations", label: "Integrations", icon: "&#128268;" },
   { path: "/company", label: "Company", icon: "&#9881;" },
 ];
 

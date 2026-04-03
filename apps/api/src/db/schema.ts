@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, integer, jsonb, boolean } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -29,10 +29,25 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Agent Platform Integrations
+export const connectors = pgTable("connectors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  platform: text("platform").notNull(), // 'hermes', 'openclaw', etc.
+  webhookSecret: text("webhook_secret"),
+  apiKey: text("api_key"),
+  apiUrl: text("api_url"),
+  enabled: boolean("enabled").default(true),
+  config: jsonb("config"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const agents = pgTable("agents", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),
   projectId: uuid("project_id").references(() => projects.id),
+  platform: text("platform"), // The platform this agent runs on
+  externalId: text("external_id"), // ID of the agent in its native platform
   name: text("name").notNull(),
   role: text("role"),
   status: text("status").default("idle"),
@@ -59,8 +74,9 @@ export const events = pgTable("events", {
   companyId: uuid("company_id").references(() => companies.id),
   projectId: uuid("project_id").references(() => projects.id),
   agentId: uuid("agent_id").references(() => agents.id),
+  platform: text("platform"), // Source platform of the event
   type: text("type").notNull(),
-  payload: text("payload"), 
+  payload: text("payload"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -74,7 +90,6 @@ export const goals = pgTable("goals", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Calendar Events
 export const calendarEvents = pgTable("calendar_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),
@@ -85,7 +100,6 @@ export const calendarEvents = pgTable("calendar_events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Chat Messages
 export const chatMessages = pgTable("chat_messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),
@@ -95,7 +109,6 @@ export const chatMessages = pgTable("chat_messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Journal Entries
 export const journalEntries = pgTable("journal_entries", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),

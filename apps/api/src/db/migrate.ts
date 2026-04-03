@@ -46,6 +46,8 @@ async function main() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         company_id UUID NOT NULL REFERENCES companies(id),
         project_id UUID REFERENCES projects(id),
+        platform TEXT,
+        external_id TEXT,
         name TEXT NOT NULL,
         role TEXT,
         status TEXT DEFAULT 'idle',
@@ -74,8 +76,22 @@ async function main() {
         company_id UUID REFERENCES companies(id),
         project_id UUID REFERENCES projects(id),
         agent_id UUID REFERENCES agents(id),
+        platform TEXT,
         type TEXT NOT NULL,
         payload TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`connectors`, `
+      CREATE TABLE IF NOT EXISTS connectors (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id),
+        platform TEXT NOT NULL,
+        webhook_secret TEXT,
+        api_key TEXT,
+        api_url TEXT,
+        enabled BOOLEAN DEFAULT true,
+        config JSONB,
         created_at TIMESTAMP DEFAULT NOW()
       )
     `],
@@ -131,7 +147,28 @@ async function main() {
     }
   }
 
-  console.log("\nAll tables ready!");
+  // Add platform/external_id columns to agents if they exist without them
+  console.log("\nAdding columns to existing tables if needed...");
+  const columnAdditions = [
+    ['agents', 'platform', 'ALTER TABLE agents ADD COLUMN IF NOT EXISTS platform TEXT'],
+    ['agents', 'external_id', 'ALTER TABLE agents ADD COLUMN IF NOT EXISTS external_id TEXT'],
+    ['events', 'platform', 'ALTER TABLE events ADD COLUMN IF NOT EXISTS platform TEXT'],
+  ];
+
+  for (const [table, col, stmt] of columnAdditions) {
+    try {
+      await sql.unsafe(stmt);
+      console.log(`  [OK] ${table}.${col}`);
+    } catch (e: any) {
+      if (e.message.includes('already')) {
+        console.log(`  [SKIP] ${table}.${col}: already exists`);
+      } else {
+        console.log(`  [WARN] ${table}.${col}: ${e.message.split('\n')[0]}`);
+      }
+    }
+  }
+
+  console.log("\nAll tables and columns ready!");
   await sql.end();
 }
 
