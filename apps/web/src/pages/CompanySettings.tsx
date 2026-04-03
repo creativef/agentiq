@@ -56,7 +56,7 @@ export default function CompanySettings() {
 
         {/* Members */}
         <div style={{ background: "#1f2937", borderRadius: "8px", padding: "1rem", border: "1px solid #374151" }}>
-          <h2 style={{ fontSize: "1rem", fontWeight: "bold", marginBottom: "1rem" }}>Team Members</h2>
+          <h2 style={{ fontSize: "1rem", fontWeight: "bold", marginBottom: "1rem" }}>Owners & Founders</h2>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "1rem" }}>
             {members.map((m: any) => (
               <div key={m.id || m.name} style={{ display: "flex", alignItems: "center", gap: "8px", background: "#374151", padding: "6px 12px", borderRadius: "8px" }}>
