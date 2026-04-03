@@ -10,6 +10,7 @@ tasksRouter.use(authMiddleware);
 // GET /tasks - all tasks for current user's companies
 tasksRouter.get("/tasks", async (c) => {
   const user: UserPayload = c.get("user");
+  const projectId = c.req.query("projectId") || null;
   const result = await db
     .select({
       id: tasks.id,
@@ -29,9 +30,13 @@ tasksRouter.get("/tasks", async (c) => {
     .leftJoin(projects, sql`${tasks.projectId} = ${projects.id}`)
     .innerJoin(companies, sql`${projects.companyId} = ${companies.id}`)
     .innerJoin(companyMembers, sql`${companyMembers.companyId} = ${companies.id}`)
-    .where(sql`${companyMembers.userId} = ${user.userId}`)
-    .orderBy(tasks.createdAt);
-  return c.json({ tasks: result });
+    .where(sql`${companyMembers.userId} = ${user.userId}`);
+  
+  const filtered = projectId
+    ? result.filter((t) => t.projectId === projectId)
+    : result;
+  
+  return c.json({ tasks: filtered });
 });
 
 // POST /tasks

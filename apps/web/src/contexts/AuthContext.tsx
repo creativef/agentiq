@@ -13,11 +13,20 @@ interface Company {
   role: string;
 }
 
+interface Project {
+  id: string;
+  name: string;
+}
+
 interface AuthContextType {
   user: User | null;
   company: Company | null;
   companies: Company[];
+  project: Project | null;
+  projects: Project[];
   setCompany: (c: Company) => void;
+  setProject: (p: Project | null) => void;
+  refreshProjects: () => void;
   login: (email: string, pass: string) => Promise<void>;
   register: (email: string, pass: string, company: string) => Promise<void>;
   logout: () => void;
@@ -29,7 +38,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [company, setCompanyState] = useState<Company | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [project, setProjectState] = useState<Project | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const navigate = useNavigate();
+
+  // Fetch projects for a given company
+  const loadProjects = (companyId: string) => {
+    fetch(`/api/companies/${companyId}/projects`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const projs = d?.projects || [];
+        setProjects(projs);
+        // Restore or default to first project
+        const stored = localStorage.getItem(`activeProject_${companyId}`);
+        const active = projs.find((p: Project) => p.id === stored) || projs[0] || null;
+        setProjectState(active);
+        if (active) localStorage.setItem(`activeProject_${companyId}`, active.id);
+      })
+      .catch(console.error);
+  };
 
   useEffect(() => {
     Promise.all([
@@ -44,6 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const active = comp.companies.find((c: Company) => c.id === stored) || comp.companies[0];
           setCompanyState(active);
           localStorage.setItem("activeCompanyId", active.id);
+          loadProjects(active.id);
           if (window.location.pathname === "/login" || window.location.pathname === "/") {
             navigate("/dashboard", { replace: true });
           }
@@ -51,6 +79,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
   }, []);
+
+  const setCompany = (c: Company) => {
+    setCompanyState(c);
+    localStorage.setItem("activeCompanyId", c.id);
+    loadProjects(c.id);
+  };
+
+  const setProject = (p: Project | null) => {
+    setProjectState(p);
+    if (p && company) localStorage.setItem(`activeProject_${company.id}`, p.id);
+    if (!p && company) localStorage.removeItem(`activeProject_${company.id}`);
+  };
+
+  const refreshProjects = () => {
+    if (company) loadProjects(company.id);
+  };
 
   const login = async (email: string, pass: string) => {
     const res = await fetch("/api/auth/login", { method: "POST", credentials: "include", body: JSON.stringify({ email, password: pass }), headers: { "Content-Type": "application/json" } });
@@ -64,6 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const first = compData.companies[0];
       setCompanyState(first);
       localStorage.setItem("activeCompanyId", first.id);
+      loadProjects(first.id);
       navigate("/dashboard", { replace: true });
     }
   };
@@ -80,6 +125,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setCompanyState(nc);
       setCompanies([nc]);
       localStorage.setItem("activeCompanyId", companyId);
+      loadProjects(companyId);
       navigate("/dashboard", { replace: true });
     }
   };
@@ -89,18 +135,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setCompanyState(null);
     setCompanies([]);
+    setProjectState(null);
+    setProjects([]);
     localStorage.removeItem("activeCompanyId");
+    if (company) localStorage.removeItem(`activeProject_${company.id}`);
     navigate("/login", { replace: true });
   };
 
   return (
-    <AuthContext.Provider value={{ user, company, companies, setCompany: setCompanyState, login, register, logout }}>
+    <AuthContext.Provider value={{ user, company, companies, project, projects, setCompany, setProject, refreshProjects, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be inside AuthProvider");
   return ctx;

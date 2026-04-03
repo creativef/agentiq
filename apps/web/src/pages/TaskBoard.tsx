@@ -35,15 +35,14 @@ export default function TaskBoard() {
   const [form, setForm] = useState({ title: "", description: "", priority: "medium" });
 
   useEffect(() => {
-    fetch("/api/tasks", { credentials: "include" })
+    const url = project
+      ? `/api/tasks?projectId=${project.id}`
+      : "/api/tasks";
+    fetch(url, { credentials: "include" })
       .then(r => r.json())
-      .then(d => {
-        const filtered = (d.tasks || []).filter((t: Task) => !company || true); 
-        setTasks(filtered);
-      })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [company]);
+  }, [company, project]);
 
   const handleStatus = useCallback(async (taskId: string, status: string) => {
     await fetch(`/api/tasks/${taskId}`, {

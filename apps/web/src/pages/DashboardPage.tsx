@@ -6,35 +6,54 @@ interface Agent {
   name: string;
   role: string;
   status: string;
-}
-
-interface Stats {
-  totalAgents: number;
-  activeAgents: number;
-  totalTasks: number;
-  completedTasks: number;
+  projectId: string | null;
 }
 
 export default function DashboardPage() {
-  const { company, companies, setCompany } = useAuth();
-  const [stats, setStats] = useState<Stats | null>(null);
+  const { company, companies, setCompany, project, projects, setProject } = useAuth();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [events, setEvents] = useState<any[]>([]);
+  const [stats, setStats] = useState<{ totalAgents: number; activeAgents: number; totalTasks: number; completedTasks: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!company) { setLoading(false); return; }
     setLoading(true);
-    fetch(`/api/companies/${company.id}/dashboard`, { credentials: "include" })
+    fetch(`/api/companies/${company.id}/agents`, { credentials: "include" })
       .then(r => r.json())
       .then(data => {
-        setStats(data.stats);
         setAgents(data.agents || []);
-        setEvents(data.timeline || []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [company]);
+
+  useEffect(() => {
+    if (!company) return;
+    fetch(`/api/companies/${company.id}/dashboard`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setStats(data.stats);
+      })
+      .catch(console.error);
+  }, [company]);
+
+  useEffect(() => {
+    if (!company) return;
+    fetch(`/api/companies/${company.id}/dashboard`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setStats(data.stats);
+          // Scope events by project if selected
+          const timeline = data.timeline || [];
+          setEvents(project ? timeline.filter((e: any) => {
+            // We'd need project data in events - for now show all
+            return true;
+          }) : timeline);
+        }
+      });
+  }, [company, project]);
 
   if (!company) {
     return (
@@ -50,11 +69,15 @@ export default function DashboardPage() {
   }
 
   const kpis = [
-    { label: "Total Agents", value: stats?.totalAgents ?? 0, icon: "\uD83E\uDD16" },
-    { label: "Active Agents", value: stats?.activeAgents ?? 0, icon: "\u26A1" },
-    { label: "Total Tasks", value: stats?.totalTasks ?? 0, icon: "\uD83D\uDCCB" },
-    { label: "Completed", value: stats?.completedTasks ?? 0, icon: "\u2705" },
+    { label: "Total Agents", value: stats?.totalAgents ?? 0, icon: "\u{1F916}" },
+    { label: "Active Agents", value: stats?.activeAgents ?? 0, icon: "\u{26A1}" },
+    { label: "Total Tasks", value: stats?.totalTasks ?? 0, icon: "\u{1F4CB}" },
+    { label: "Completed", value: stats?.completedTasks ?? 0, icon: "\u{2705}" },
   ];
+
+  // Filter agents by project
+  const filteredAgents = project ? agents.filter(a => a.projectId === project.id) : agents;
+  const projectLabel = project ? project.name : "All Projects";
 
   return (
     <div style={{ padding: "1.5rem" }}>
@@ -65,14 +88,27 @@ export default function DashboardPage() {
               value={company.id}
               onChange={e => {
                 const c = companies.find(c => c.id === e.target.value);
-                if (c) { setCompany(c); localStorage.setItem("activeCompanyId", c.id); }
+                if (c) { setCompany(c); }
               }}
               style={{ background: "#374151", color: "white", border: "1px solid #4B5563", borderRadius: "4px", padding: "6px" }}
             >
               {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
-          <h1 style={{ fontSize: "1.5rem", fontWeight: "bold" }}>Dashboard &mdash; {company.name}</h1>
+          {projects.length > 1 && (
+            <select
+              value={project?.id || ""}
+              onChange={e => {
+                const p = projects.find(p => p.id === e.target.value);
+                if (p) setProject(p); else setProject(null);
+              }}
+              style={{ background: "#374151", color: "white", border: "1px solid #4B5563", borderRadius: "4px", padding: "6px" }}
+            >
+              <option value="">All Projects</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+          <h1 style={{ fontSize: "1.5rem", fontWeight: "bold" }}>Dashboard &mdash; {company.name} / {projectLabel}</h1>
         </div>
         <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>{company.goal}</p>
       </div>
@@ -94,11 +130,11 @@ export default function DashboardPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1.5rem" }}>
         <div style={{ background: "#1f2937", borderRadius: "8px", padding: "1rem", border: "1px solid #374151" }}>
           <h2 style={{ fontSize: "1rem", fontWeight: "bold", marginBottom: "1rem" }}>Status Wall</h2>
-          {agents.length === 0 ? (
+          {filteredAgents.length === 0 ? (
             <p style={{ color: "#6b7280" }}>No agents yet</p>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: "0.5rem" }}>
-              {agents.map(a => (
+              {filteredAgents.map(a => (
                 <div key={a.id} style={{ padding: "0.75rem", borderRadius: "6px", border: `2px solid ${agentColor(a.status)}`, textAlign: "center" }}>
                   <div style={{ fontSize: "1.25rem" }}>&#129302;</div>
                   <div style={{ fontWeight: "bold", fontSize: "0.8rem", marginTop: "4px" }}>{a.name}</div>

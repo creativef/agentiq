@@ -32,7 +32,10 @@ export default function AgentsPage() {
 
   const fetchAgents = () => {
     if (!company) return;
-    fetch(`/api/companies/${company.id}/agents`, { credentials: "include" })
+    const url = project
+      ? `/api/companies/${company.id}/agents?projectId=${project.id}`
+      : `/api/companies/${company.id}/agents`;
+    fetch(url, { credentials: "include" })
       .then(r => r.json())
       .then(d => setAgents(d.agents || []))
       .catch(console.error)
@@ -41,7 +44,7 @@ export default function AgentsPage() {
 
   useEffect(() => {
     fetchAgents();
-  }, [company]);
+  }, [company, project]);
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();

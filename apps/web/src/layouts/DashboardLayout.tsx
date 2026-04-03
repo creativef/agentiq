@@ -6,6 +6,7 @@ const nav = [
   { path: "/dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
   { path: "/tasks", label: "Tasks", icon: "\u{1F4CB}" },
   { path: "/agents", label: "Agents", icon: "\u{1F916}" },
+  { path: "/projects", label: "Projects", icon: "\u{1F4C1}" },
   { path: "/calendar", label: "Calendar", icon: "\u{1F4C5}" },
   { path: "/files", label: "Files", icon: "\u{1F4C1}" },
   { path: "/chat", label: "Chat", icon: "\u{1F4AC}" },
@@ -15,7 +16,7 @@ const nav = [
 ];
 
 export default function DashboardLayout() {
-  const { user, company, companies, setCompany, logout } = useAuth();
+  const { user, company, companies, project, projects, setCompany, setProject, logout } = useAuth();
   const location = useLocation();
   const [showCreateCompany, setShowCreateCompany] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
@@ -31,90 +32,69 @@ export default function DashboardLayout() {
       headers: { "Content-Type": "application/json" },
     });
     const data = await res.json();
-    if (data.company) {
-      window.location.reload();
-    }
+    if (data.company) window.location.reload();
   };
 
   const linkStyle = (path: string) => ({
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-    padding: "8px",
-    margin: "2px 0",
-    textDecoration: "none",
-    color: "inherit",
+    display: "flex", alignItems: "center", gap: "0.5rem",
+    padding: "8px", margin: "2px 0", textDecoration: "none",
+    color: "inherit", borderRadius: "4px", fontSize: "0.9rem",
     background: location.pathname === path ? "#374151" : "transparent",
-    borderRadius: "4px",
-    fontSize: "0.9rem",
   });
 
   return (
     <div className="app-shell">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
-      )}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
 
-      {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""}`}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <h2 className="sidebar-title">Mission Control</h2>
-          <button
-            className="sidebar-close"
-            onClick={() => setSidebarOpen(false)}
-            style={{ display: "none" }}
-          >
-            ✕
-          </button>
+          <button className="sidebar-close" onClick={() => setSidebarOpen(false)}>✕</button>
         </div>
 
         {/* Company Switcher */}
         {companies.length > 1 ? (
-          <select
-            className="sidebar-select"
-            value={company?.id || ""}
+          <select className="sidebar-select" value={company?.id || ""}
             onChange={e => {
               const c = companies.find(c => c.id === e.target.value);
-              if (c) { setCompany(c); localStorage.setItem("activeCompanyId", c.id); }
-              setSidebarOpen(false);
-            }}
-          >
+              if (c) { setCompany(c); setSidebarOpen(false); }
+            }}>
             {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         ) : company && (
           <div className="sidebar-company">{company.name}</div>
         )}
 
-        <button
-          className="sidebar-btn-secondary"
-          onClick={() => setShowCreateCompany(!showCreateCompany)}
-        >
+        {/* Project Switcher */}
+        {projects.length > 0 ? (
+          <select className="sidebar-select" value={project?.id || ""}
+            onChange={e => {
+              const p = projects.find(p => p.id === e.target.value);
+              if (p) setProject(p);
+              else setProject(null);
+              setSidebarOpen(false);
+            }}>
+            <option value="">All Projects</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        ) : project && (
+          <div className="sidebar-company" style={{ fontSize: "0.8rem", color: "#6b7280" }}>📁 {project.name}</div>
+        )}
+
+        <button className="sidebar-btn-secondary" onClick={() => setShowCreateCompany(!showCreateCompany)}>
           + New Company
         </button>
 
         {showCreateCompany && (
           <form onSubmit={handleCreateCompany} className="sidebar-form">
-            <input
-              autoFocus
-              placeholder="Company name"
-              value={newCompanyName}
-              onChange={e => setNewCompanyName(e.target.value)}
-              className="sidebar-input"
-            />
+            <input autoFocus placeholder="Company name" value={newCompanyName} onChange={e => setNewCompanyName(e.target.value)} className="sidebar-input" />
             <button type="submit" className="sidebar-btn-primary">Create</button>
           </form>
         )}
 
         <nav className="sidebar-nav">
           {nav.map(item => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className="sidebar-link"
-              style={linkStyle(item.path)}
-              onClick={() => setSidebarOpen(false)}
-            >
+            <Link key={item.path} to={item.path} className="sidebar-link" style={linkStyle(item.path)} onClick={() => setSidebarOpen(false)}>
               <span>{item.icon}</span>
               {item.label}
             </Link>
@@ -127,9 +107,7 @@ export default function DashboardLayout() {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="main-content">
-        {/* Mobile hamburger */}
         <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>☰</button>
         <Outlet />
       </main>

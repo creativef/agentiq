@@ -35,6 +35,7 @@ agentsRouter.get("/agents", async (c) => {
 // GET /companies/:companyId/agents
 agentsRouter.get("/companies/:companyId/agents", async (c) => {
   const companyId = c.req.param("companyId");
+  const projectId = c.req.query("projectId") || null;
   const user: UserPayload = c.get("user");
   const access = await db.select()
     .from(companyMembers)
@@ -42,7 +43,7 @@ agentsRouter.get("/companies/:companyId/agents", async (c) => {
     .limit(1);
   if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
 
-  const agentsList = await db
+  let query = db
     .select({
       id: agents.id,
       name: agents.name,
@@ -54,10 +55,17 @@ agentsRouter.get("/companies/:companyId/agents", async (c) => {
       projectId: agents.projectId,
       createdAt: agents.createdAt,
       heartbeatInterval: agents.heartbeatInterval,
+      platform: agents.platform,
     })
     .from(agents)
-    .where(sql`${agents.companyId} = ${companyId}`)
-    .orderBy(agents.name);
+    .where(sql`${agents.companyId} = ${companyId}`);
+
+  if (projectId) {
+    query = query.where(sql`${agents.projectId} = ${projectId}`);
+  }
+
+  query = query.orderBy(agents.name);
+  const agentsList = await query;
   return c.json({ agents: agentsList });
 });
 

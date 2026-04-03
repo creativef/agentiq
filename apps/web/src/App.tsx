@@ -11,6 +11,7 @@ import FileHub from "./pages/FileHub";
 import CompanyOrg from "./pages/CompanyOrg";
 import CompanySettings from "./pages/CompanySettings";
 import ConnectorsPage from "./pages/ConnectorsPage";
+import ProjectsPage from "./pages/ProjectsPage";
 
 const ProtectedRoute = () => {
   const { user } = useAuth();
@@ -28,6 +29,9 @@ const AuthedApp = () => (
     </Route>
     <Route path="agents" element={<DashboardLayout />}>
       <Route index element={<AgentsPage />} />
+    </Route>
+    <Route path="projects" element={<DashboardLayout />}>
+      <Route index element={<ProjectsPage />} />
     </Route>
     <Route path="calendar" element={<DashboardLayout />}>
       <Route index element={<CalendarMeetings />} />
