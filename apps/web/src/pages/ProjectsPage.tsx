@@ -14,6 +14,8 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formName, setFormName] = useState("");
+  const [editing, setEditing] = useState<ProjectData | null>(null);
+  const [editName, setEditName] = useState("");
 
   useEffect(() => {
     if (!company) return;
@@ -69,6 +71,26 @@ export default function ProjectsPage() {
     if (project?.id === projId) setProject(null);
   };
 
+  const handleEdit = (p: ProjectData) => {
+    setEditing(p);
+    setEditName(p.name);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editing || !editName.trim()) return;
+    const res = await fetch(`/api/projects/${editing.id}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName.trim() }),
+    });
+    if (res.ok) {
+      setProjects(projects.map(p => p.id === editing.id ? { ...p, name: editName.trim() } : p));
+      if (project?.id === editing.id) setProject({ ...project, name: editName.trim() });
+      setEditing(null);
+    }
+  };
+
   if (loading) return <div style={{ padding: "2rem", color: "#888" }}>Loading...</div>;
 
   if (!company) return <p style={{ padding: "2rem", color: "#888" }}>Select a company first.</p>;
@@ -106,34 +128,57 @@ export default function ProjectsPage() {
             <div key={p.id} style={{
               background: "#1f2937", borderRadius: "8px", padding: "1rem", border: p.id === project?.id ? "1px solid #3b82f6" : "1px solid #374151"
             }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+              {/* Inline edit mode */}
+              {editing?.id === p.id ? (
                 <div>
-                  <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{p.name}</div>
-                  {p.createdAt && (
-                    <div style={{ fontSize: "0.7rem", color: "#6b7280", marginTop: "2px" }}>
-                      Created {new Date(p.createdAt).toLocaleDateString()}
+                  <div style={{ marginBottom: "0.5rem" }}>
+                    <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "4px" }}>Edit project</div>
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter") handleSaveEdit(); if (e.key === "Escape") setEditing(null); }}
+                      style={{ width: "100%", padding: "6px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button onClick={handleSaveEdit} style={{ padding: "4px 10px", background: "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Save</button>
+                    <button onClick={() => setEditing(null)} style={{ padding: "4px 10px", background: "#374151", border: "none", color: "white", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                    <div>
+                      <div style={{ fontWeight: "bold", fontSize: "1.1rem" }}>{p.name}</div>
+                      {p.createdAt && (
+                        <div style={{ fontSize: "0.7rem", color: "#6b7280", marginTop: "2px" }}>
+                          Created {new Date(p.createdAt).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                    {p.id === project?.id && (
+                      <span style={{ padding: "2px 8px", borderRadius: "12px", fontSize: "0.7rem", fontWeight: "bold", background: "#1e3a5f", color: "#60a5fa" }}>Active</span>
+                    )}
+                  </div>
+
+                  {p.stats && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem", marginTop: "0.75rem", fontSize: "0.8rem", color: "#9ca3af" }}>
+                      <div>🤖 {(p.stats as any).agents || 0} agents</div>
+                      <div>📋 {(p.stats as any).tasks || 0} tasks</div>
+                      <div>⚡ {(p.stats as any).events || 0} events</div>
                     </div>
                   )}
-                </div>
-                {p.id === project?.id && (
-                  <span style={{ padding: "2px 8px", borderRadius: "12px", fontSize: "0.7rem", fontWeight: "bold", background: "#1e3a5f", color: "#60a5fa" }}>Active</span>
-                )}
-              </div>
 
-              {p.stats && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem", marginTop: "0.75rem", fontSize: "0.8rem", color: "#9ca3af" }}>
-                  <div>🤖 {(p.stats as any).agents || 0} agents</div>
-                  <div>📋 {(p.stats as any).tasks || 0} tasks</div>
-                  <div>⚡ {(p.stats as any).events || 0} events</div>
-                </div>
+                  <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
+                    {p.id !== project?.id && (
+                      <button onClick={() => setProject(p)} style={{ padding: "4px 10px", background: "#1e3a5f", border: "none", color: "#60a5fa", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Select</button>
+                    )}
+                    <button onClick={() => handleEdit(p)} style={{ padding: "4px 10px", background: "#374151", border: "none", color: "#e5e7eb", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Edit</button>
+                    <button onClick={() => handleDelete(p.id)} style={{ padding: "4px 10px", background: "#450a0a", border: "none", color: "#f87171", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", marginLeft: "auto" }}>Delete</button>
+                  </div>
+                </>
               )}
-
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
-                {p.id !== project?.id && (
-                  <button onClick={() => setProject(p)} style={{ padding: "4px 10px", background: "#1e3a5f", border: "none", color: "#60a5fa", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Select</button>
-                )}
-                <button onClick={() => handleDelete(p.id)} style={{ padding: "4px 10px", background: "#450a0a", border: "none", color: "#f87171", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", marginLeft: "auto" }}>Delete</button>
-              </div>
             </div>
           ))}
         </div>
