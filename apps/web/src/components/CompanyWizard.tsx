@@ -77,6 +77,14 @@ export default function CompanyWizard({ onComplete, onCancel }: CompanyWizardPro
 
   const allProjects = [projectName.trim() || companyName.trim() || "General Operations", ...extraProjectNames.filter(Boolean)];
 
+  // Role → default skill keys mapping
+  const roleDefaultSkills: Record<string, string[]> = {
+    FOUNDER: ["strategic_planning"],
+    CEO: ["strategic_planning"],
+    MANAGER: ["project_management"],
+    AGENT: ["research_analysis"],
+  };
+
   // Submit
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -98,30 +106,30 @@ export default function CompanyWizard({ onComplete, onCancel }: CompanyWizardPro
       ];
 
       // Resolve reporting chain
-      // CEO → Founder | Manager → CEO | Agents → Manager (fallback CEO) | Founder
       const hasRole = (role: string) => allAgents.some(a => a.role === role);
       let reportsToMap = new Map();
 
       // Set up reporting based on roles
       for (const agent of allAgents) {
         if (agent.role === "FOUNDER") {
-          reportsToMap.set(agent.templateKey, null); // Founder reports to no one
+          reportsToMap.set(agent.templateKey, null);
         } else if (agent.role === "CEO") {
           reportsToMap.set(agent.templateKey, hasRole("FOUNDER") ? "FOUNDER" : null);
         } else if (agent.role === "MANAGER") {
           reportsToMap.set(agent.templateKey, hasRole("CEO") ? "CEO" : hasRole("FOUNDER") ? "FOUNDER" : null);
         } else {
-          // Agents report to first available: Manager → CEO → Founder
           reportsToMap.set(agent.templateKey,
             hasRole("MANAGER") ? "MANAGER" : hasRole("CEO") ? "CEO" : hasRole("FOUNDER") ? "FOUNDER" : null);
         }
       }
 
+      // Assign default skills based on role
       const agentsPayload = allAgents.map(a => ({
         name: a.name,
         role: a.role,
-        reportsToRole: reportsToMap.get(a.templateKey), // Will be resolved backend-side
+        reportsToRole: reportsToMap.get(a.templateKey),
         templateKey: a.templateKey,
+        defaultSkills: roleDefaultSkills[a.role] || ["research_analysis"],
       }));
 
       const body = {

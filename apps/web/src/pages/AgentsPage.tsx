@@ -31,6 +31,9 @@ export default function AgentsPage() {
   const [editing, setEditing] = useState<AgentItem | null>(null);
   const [form, setForm] = useState({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600" });
   const [editForm, setEditForm] = useState({ name: "", status: "", budgetLimit: "", heartbeatInterval: "", reportsTo: "" });
+  const [agentSkills, setAgentSkills] = useState<any[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<any[]>([]);
+  const [showSkillPicker, setShowSkillPicker] = useState(false);
 
   const fetchAgents = () => {
     if (!company) return;
@@ -78,6 +81,12 @@ export default function AgentsPage() {
       heartbeatInterval: agent.heartbeatInterval ? String(agent.heartbeatInterval) : "3600",
       reportsTo: agent.reportsTo || "",
     });
+    // Load skills for this agent
+    fetch(`/api/agents/${agent.id}/skills`, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setAgentSkills(d?.skills || []))
+      .catch(() => setAgentSkills([]));
+    setShowSkillPicker(false);
   };
 
   const handleSaveEdit = async () => {
@@ -96,6 +105,32 @@ export default function AgentsPage() {
     });
     setEditing(null);
     fetchAgents();
+  };
+
+  const loadAvailableSkills = () => {
+    fetch("/api/skills", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setAvailableSkills(d?.skills || []))
+      .catch(() => setAvailableSkills([]));
+  };
+
+  const assignSkill = async (skillId: string) => {
+    if (!editing) return;
+    await fetch(`/api/agents/${editing.id}/skills`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skillId }),
+    });
+    fetch(`/api/agents/${editing.id}/skills`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setAgentSkills(d.skills || []));
+  };
+
+  const removeSkill = async (agentSkillId: string) => {
+    if (!editing) return;
+    await fetch(`/api/agents/${editing.id}/skills/${agentSkillId}`, { method: "DELETE", credentials: "include" });
+    setAgentSkills(agentSkills.filter(s => s.id !== agentSkillId));
   };
 
   const handleStatus = async (agentId: string, newStatus: string) => {
@@ -210,6 +245,31 @@ export default function AgentsPage() {
                           <option key={a.id} value={a.id}>{a.role === "FOUNDER" ? "🚀 " : a.role === "CEO" ? "👔 " : ""}{a.name} ({a.role})</option>
                         ))}
                     </select>
+                    <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "4px" }}>Skills</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "4px" }}>
+                      {agentSkills.map(s => (
+                        <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: "4px", background: "#2563eb", borderRadius: "12px", padding: "2px 8px", fontSize: "0.7rem", color: "white" }}>
+                          {s.icon} {s.name}
+                          <button onClick={() => removeSkill(s.id)} style={{ background: "none", border: "none", color: "white", cursor: "pointer", fontSize: "0.8rem", padding: "0 2px" }}>×</button>
+                        </span>
+                      ))}
+                      {!showSkillPicker && (
+                        <button onClick={() => { loadAvailableSkills(); setShowSkillPicker(true); }} style={{ background: "none", border: "1px dashed #4B5563", borderRadius: "12px", padding: "2px 8px", fontSize: "0.7rem", color: "#9ca3af", cursor: "pointer" }}>+ Skill</button>
+                      )}
+                    </div>
+                    {showSkillPicker && (
+                      <div style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", padding: "8px", maxHeight: "200px", overflow: "auto" }}>
+                        <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "4px" }}>Available skills:</div>
+                        {availableSkills
+                          .filter(s => !agentSkills.find(as => as.skillId === s.id))
+                          .map(s => (
+                            <button key={s.id} onClick={() => assignSkill(s.id)} style={{ display: "block", width: "100%", textAlign: "left", padding: "4px 8px", background: s.role === "CEO" ? "#1e3a5f" : "#374151", border: "none", borderRadius: "4px", color: "#e5e7eb", fontSize: "0.75rem", cursor: "pointer", marginBottom: "2px" }}>
+                              {s.icon} {s.name} <span style={{ color: "#6b7280" }}>({s.category})</span>
+                            </button>
+                          ))}
+                        <button onClick={() => setShowSkillPicker(false)} style={{ marginTop: "4px", background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: "0.75rem" }}>Close</button>
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", gap: "0.5rem" }}>
                     <button onClick={handleSaveEdit} style={{ padding: "4px 10px", background: "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Save</button>
@@ -229,7 +289,12 @@ export default function AgentsPage() {
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>{roleLabel(a.role)}{a.platform ? ` · ${a.platform}` : ""}</div>
+                      <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                        {roleLabel(a.role)}{a.platform ? ` · ${a.platform}` : ""}
+                        {a.reportsTo && (
+                          <span style={{ color: "#f59e0b" }}> · ↓</span>
+                        )}
+                      </div>
                     </div>
                     <span style={{ padding: "2px 8px", borderRadius: "12px", fontSize: "0.75rem", fontWeight: "bold", background: `${statusColors[a.status] || "#6b7280"}22`, color: statusColors[a.status] || "#6b7280", textTransform: "uppercase" }}>
                       {a.status}

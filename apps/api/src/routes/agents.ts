@@ -85,7 +85,7 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
   const projResult = await db.select().from(projects).where(sql`${projects.companyId} = ${companyId}`).limit(1);
   const projectId = body.projectId || projResult[0]?.id || null;
 
-  const newAgent = await db.insert(agents).values({
+  const result = await db.insert(agents).values({
     companyId,
     projectId,
     name: body.name || "Agent",
@@ -96,7 +96,24 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
     reportsTo: body.reportsTo || null,
   }).returning();
 
-  return c.json({ agent: newAgent[0] });
+  // Assign default skills based on role
+  const skillMap: Record<string, string> = {
+    FOUNDER: "strategic_planning",
+    CEO: "strategic_planning",
+    MANAGER: "project_management",
+    DEVELOPER: "code_generation",
+    DEVELOPER: "code_generation",
+  };
+  if (body.skills && Array.isArray(body.skills)) {
+    for (const skillId of body.skills) {
+      await db.insert(agentSkills).values({
+        agentId: result[0].id,
+        skillId,
+      });
+    }
+  }
+
+  return c.json({ agent: result[0] });
 });
 
 // PUT /agents/:agentId

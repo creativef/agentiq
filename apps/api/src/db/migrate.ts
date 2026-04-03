@@ -209,7 +209,48 @@ async function main() {
     } catch (e: any) {
       console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
     }
-  }
+  console.log("\nSeeding skill templates...");
+  const seedSkills = [
+    { name: 'Code Generation', category: 'development', icon: '💻',
+      description: 'Write, review, and debug code',
+      instructions: 'You are a skilled software engineer. Write clean, tested, documented code. Follow best practices and design patterns. Prefer simplicity over cleverness. Add comments explaining non-obvious logic.' },
+    { name: 'Research & Analysis', category: 'analysis', icon: '🔍',
+      description: 'Market research and data analysis',
+      instructions: 'You are a research analyst. Gather data from reliable sources. Synthesize findings into clear, actionable insights. Always cite your sources. Flag uncertainty when data is incomplete.' },
+  // Seed skill templates if none exist
+  await db.select({ count: sql`count(*)` }).from(skills).then(rows => {
+    const checkSkills = rows;
+    return checkSkills;
+  }).then(async (checkSkills) => {
+    if (parseInt(checkSkills[0].count) > 0) return;
+    console.log("\nSeeding skill templates...");
+    const seedSkills = [
+      { id: "strategic_planning", name: "Strategic Planning", category: "leadership", icon: "📊",
+        description: "Business strategy and planning",
+        instructions: "You are a strategic advisor. Think long-term. Identify risks and opportunities. Provide data-driven recommendations. Present clear, actionable plans with timelines." },
+      { id: "project_management", name: "Project Management", category: "operations", icon: "📋",
+        description: "Coordination and delivery",
+        instructions: "You are a project manager. Break work into actionable tasks. Track dependencies. Communicate blockers early. Optimize for team velocity." },
+      { id: "code_generation", name: "Code Generation", category: "development", icon: "💻",
+        description: "Write, review, and debug code",
+        instructions: "You are a skilled software developer. Write clean, tested, documented code. Follow best practices and design patterns. Prefer simplicity over cleverness." },
+      { id: "research_analysis", name: "Research & Analysis", category: "analysis", icon: "🔍",
+        description: "Market research and data analysis",
+        instructions: "You are a research analyst. Gather data from reliable sources. Synthesize findings into clear, actionable insights. Always cite sources. Flag uncertainty." },
+      { id: "content_writing", name: "Content Writing", category: "content", icon: "📝",
+        description: "Blog posts, documentation, and copy",
+        instructions: "You are a senior content writer. Write clear, engaging, audience-appropriate content. Use active voice. Edit ruthlessly. Match the brand voice and tone." },
+    ];
+
+    for (const s of seedSkills) {
+      try {
+        await sql`INSERT INTO skills (id, name, category, description, instructions, icon) VALUES (${crypto.randomUUID()}, ${s.name}, ${s.category}, ${s.description}, ${s.instructions}, ${s.icon})`;
+        console.log(`  [SEED] ${s.name}`);
+      } catch (e: any) {
+        console.log(`  [SKIP seed] ${s.name}: ${e.message.split('\n')[0]}`);
+      }
+    }
+  });
 
   await sql.end();
 }

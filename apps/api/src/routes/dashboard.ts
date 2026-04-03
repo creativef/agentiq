@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { companies, companyMembers, agents, tasks, events, projects, goals, users } from "../db/schema";
+import { companies, companyMembers, agents, tasks, events, projects, goals, users, skills, agentSkills as agentSkillsTable } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 
 const dashboard = new Hono();
@@ -79,18 +79,30 @@ dashboard.post("/companies", async (c) => {
       createdAgents.set(agent.templateKey || agent.name, result[0]);
     }
 
-    // Second pass: resolve reportsTo roles into agent IDs and update
-    for (const agent of agentDefs) {
-      if (agent.reportsToRole) {
-        const managerAgent = createdAgents.get(agent.reportsToRole);
+      // Second pass: resolve reportsTo and assign default skills
+      for (const agent of agentDefs) {
         const thisAgent = createdAgents.get(agent.templateKey || agent.name);
-        if (managerAgent && thisAgent) {
-          await db.update(agents)
-            .set({ reportsTo: managerAgent.id })
-            .where(sql`${agents.id} = ${thisAgent.id}`);
+        if (!thisAgent) continue;
+        // Resolve reporting
+        if (agent.reportsToRole) {
+          const managerAgent = createdAgents.get(agent.reportsToRole);
+          if (managerAgent) {
+            await db.update(agents)
+              .set({ reportsTo: managerAgent.id })
+              .where(sql`${agents.id} = ${thisAgent.id}`);
+          }
+        }
+        // Assign default skills based on role/category
+        if (agent.defaultSkills && Array.isArray(agent.defaultSkills)) {
+          const skillRows = await db.select({ id: skills.id }).from(skills).where(sql`${skills.id} IN ${agent.defaultSkills}`);
+          for (const skill of skillRows) {
+            await db.insert(agentSkillsTable).values({
+              agentId: thisAgent.id,
+              skillId: skill.id,
+            }).onConflictDoNothing();
+          }
         }
       }
-    }
   } else {
     // Fallback: create default Founder agent
     await db.insert(agents).values({

@@ -131,3 +131,45 @@ export const journalEntries = pgTable("journal_entries", {
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Skill definitions — instruction sets that give agents capabilities
+export const skills = pgTable("skills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  instructions: text("instructions").notNull(),
+  icon: text("icon"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Which skills each agent has
+export const agentSkills = pgTable("agent_skills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id").notNull(),
+  skillId: uuid("skill_id").notNull(),
+  // Override default instructions for this specific agent
+  customInstructions: text("custom_instructions"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Skill definitions — instruction sets that give agents capabilities
+export const skills = pgTable("skills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  description: text("description"),
+  instructions: text("instructions").notNull(),
+  icon: text("icon"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Which skills each agent has
+export const agentSkills = pgTable("agent_skills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id").notNull(),
+  skillId: uuid("skill_id").notNull(),
+  // Override default instructions for this specific agent
+  customInstructions: text("custom_instructions"),
+  createdAt: timestamp("created_at").defaultNow(),
+});

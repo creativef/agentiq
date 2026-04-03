@@ -15,6 +15,7 @@ import { connectorsRouter } from "./routes/connectors";
 import { goalsRouter } from "./routes/goals";
 import { projectsRouter } from "./routes/projects";
 import { auditMiddleware } from "./middleware/audit-log";
+import { skillsRouter } from "./routes/skills";
 
 export const app = new Hono();
 
@@ -42,6 +43,7 @@ app.route("/api", realtime);
 app.route("/api", data);
 app.route("/api", connectorsRouter);
 app.route("/api", goalsRouter);
+app.route("/api", skillsRouter);
 app.route("/api", projectsRouter);
 
 app.notFound((c) => {
