@@ -1,6 +1,8 @@
 import { Link, Outlet, useLocation } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { useState } from "react";
+import Modal from "../components/Modal";
+import CompanyWizard from "../components/CompanyWizard";
 
 const nav = [
   { path: "/dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
@@ -18,22 +20,8 @@ const nav = [
 export default function DashboardLayout() {
   const { user, company, companies, project, projects, setCompany, setProject, logout } = useAuth();
   const location = useLocation();
-  const [showCreateCompany, setShowCreateCompany] = useState(false);
-  const [newCompanyName, setNewCompanyName] = useState("");
+  const [showWizard, setShowWizard] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleCreateCompany = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCompanyName.trim()) return;
-    const res = await fetch("/api/companies", {
-      method: "POST",
-      credentials: "include",
-      body: JSON.stringify({ name: newCompanyName }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const data = await res.json();
-    if (data.company) window.location.reload();
-  };
 
   const linkStyle = (path: string) => ({
     display: "flex", alignItems: "center", gap: "0.5rem",
@@ -81,16 +69,9 @@ export default function DashboardLayout() {
           <div className="sidebar-company" style={{ fontSize: "0.8rem", color: "#6b7280" }}>📁 {project.name}</div>
         )}
 
-        <button className="sidebar-btn-secondary" onClick={() => setShowCreateCompany(!showCreateCompany)}>
+        <button className="sidebar-btn-secondary" onClick={() => setShowWizard(true)}>
           + New Company
         </button>
-
-        {showCreateCompany && (
-          <form onSubmit={handleCreateCompany} className="sidebar-form">
-            <input autoFocus placeholder="Company name" value={newCompanyName} onChange={e => setNewCompanyName(e.target.value)} className="sidebar-input" />
-            <button type="submit" className="sidebar-btn-primary">Create</button>
-          </form>
-        )}
 
         <nav className="sidebar-nav">
           {nav.map(item => (
@@ -111,6 +92,14 @@ export default function DashboardLayout() {
         <button className="mobile-menu-btn" onClick={() => setSidebarOpen(true)}>☰</button>
         <Outlet />
       </main>
+
+      {/* New Company Wizard Modal */}
+      <Modal open={showWizard} onClose={() => setShowWizard(false)} title="Set Up Your Company" size="lg">
+        <CompanyWizard
+          onComplete={() => setShowWizard(false)}
+          onCancel={() => setShowWizard(false)}
+        />
+      </Modal>
     </div>
   );
 }

@@ -24,7 +24,7 @@ dashboard.get("/companies", async (c) => {
   return c.json({ companies: result });
 });
 
-// POST /companies - create a new company
+// POST /companies - create a new company (supports basic and wizard payload)
 dashboard.post("/companies", async (c) => {
   const user: UserPayload = c.get("user");
   const body = await c.req.json().catch(() => ({}));
@@ -37,14 +37,55 @@ dashboard.post("/companies", async (c) => {
   }
 
   const name = body.name.trim();
-  const goal = (body.goal && typeof body.goal === "string") ? body.goal : "Building something amazing";
+  const goal = (body.goal || body.description) && typeof (body.goal || body.description) === "string"
+    ? (body.goal || body.description)
+    : "Building something amazing";
+
+  // Support new wizard payload with projects[] and agents[]
+  const projectNames: string[] = body.projects?.filter((p: string) => p.trim())
+    .map((p: string) => p.trim()) || [];
+  const agentDefs: { name: string; role: string }[] = body.agents || [];
 
   const newComp = await db.insert(companies).values({ name, goal }).returning();
   const companyId = newComp[0].id;
   await db.insert(companyMembers).values({ companyId, userId: user.userId, role: "OWNER" });
-  const proj = await db.insert(projects).values({ companyId, name: "General Operations" }).returning();
-  await db.insert(agents).values({ companyId, projectId: proj[0].id, name: "Founder", role: "FOUNDER", status: "idle" }).returning();
-  return c.json({ company: { id: companyId, name, goal, role: "OWNER" } });
+
+  // Create projects
+  const createdProjectIds: string[] = [];
+  if (projectNames.length > 0) {
+    for (const projName of projectNames) {
+      const proj = await db.insert(projects).values({ companyId, name: projName }).returning();
+      createdProjectIds.push(proj[0].id);
+    }
+  } else {
+    const proj = await db.insert(projects).values({ companyId, name: "General Operations" }).returning();
+    createdProjectIds.push(proj[0].id);
+  }
+
+  // Create agents (assign to first project)
+  const firstProjectId = createdProjectIds[0];
+  if (agentDefs && agentDefs.length > 0) {
+    for (const agent of agentDefs) {
+      await db.insert(agents).values({
+        companyId,
+        projectId: firstProjectId,
+        name: agent.name || "Agent",
+        role: agent.role || "AGENT",
+        status: "idle",
+      }).returning();
+    }
+  } else {
+    // Fallback: create default Founder agent
+    await db.insert(agents).values({
+      companyId,
+      projectId: firstProjectId,
+      name: "Founder",
+      role: "FOUNDER",
+      status: "idle",
+    }).returning();
+  }
+
+  return c.json({ company: { id: companyId, name, goal, role: "OWNER", projectCount: createdProjectIds.length, agentCount: agentDefs?.length || 1 } });
 });
 
 // GET /companies/:id/dashboard - overview for a specific company
