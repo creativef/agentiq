@@ -7,6 +7,7 @@ import { db } from "../db/client";
 import { users, companies, companyMembers, projects, agents } from "../db/schema";
 import { authMiddleware, JWT_SECRET } from "../middleware/auth";
 import { rateLimitMiddleware } from "../middleware/rate-limiter";
+import { auditMiddleware } from "../middleware/audit-log";
 import { sql } from 'drizzle-orm';
 
 const auth = new Hono();

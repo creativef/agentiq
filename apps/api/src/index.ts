@@ -13,10 +13,14 @@ import { realtime } from "./routes/realtime";
 import { data } from "./routes/data";
 import { connectorsRouter } from "./routes/connectors";
 import { goalsRouter } from "./routes/goals";
+import { auditMiddleware } from "./middleware/audit-log";
 
 export const app = new Hono();
 
 app.use('*', logger())
+// Audit logging for mutations (POST/PUT/DELETE)
+app.use('/api/*', auditMiddleware);
+
 app.use('/api/*', cors({
   origin: ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true,

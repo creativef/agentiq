@@ -29,11 +29,10 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Agent Platform Integrations
 export const connectors = pgTable("connectors", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),
-  platform: text("platform").notNull(), // 'hermes', 'openclaw', etc.
+  platform: text("platform").notNull(),
   webhookSecret: text("webhook_secret"),
   apiKey: text("api_key"),
   apiUrl: text("api_url"),
@@ -46,8 +45,8 @@ export const agents = pgTable("agents", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),
   projectId: uuid("project_id").references(() => projects.id),
-  platform: text("platform"), // The platform this agent runs on
-  externalId: text("external_id"), // ID of the agent in its native platform
+  platform: text("platform"),
+  externalId: text("external_id"),
   name: text("name").notNull(),
   role: text("role"),
   status: text("status").default("idle"),
@@ -74,9 +73,24 @@ export const events = pgTable("events", {
   companyId: uuid("company_id").references(() => companies.id),
   projectId: uuid("project_id").references(() => projects.id),
   agentId: uuid("agent_id").references(() => agents.id),
-  platform: text("platform"), // Source platform of the event
+  platform: text("platform"),
   type: text("type").notNull(),
   payload: text("payload"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("user_id"),
+  userEmail: text("user_email"),
+  method: text("method").notNull(),
+  path: text("path").notNull(),
+  statusCode: text("status_code").notNull(),
+  resourceType: text("resource_type"),
+  resourceId: text("resource_id"),
+  userAgent: text("user_agent"),
+  ip: text("ip"),
+  message: text("message"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

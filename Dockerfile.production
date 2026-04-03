@@ -1,0 +1,36 @@
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+# Build stage
+FROM base AS builder
+WORKDIR /app
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm -C apps/web build
+
+# Production stage
+FROM node:20-alpine AS runner
+RUN corepack enable && corepack prepare pnpm@9 --activate
+WORKDIR /app
+
+# Copy workspace manifests and install production deps only
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
+COPY apps/api/package.json apps/api/
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile --prod
+
+# Copy built web assets and API source
+COPY --from=builder /app/apps/web/dist /app/apps/web/dist
+COPY apps/api/src apps/api/src/
+COPY tsconfig.base.json ./
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1
+
+CMD ["sh", "-c", "pnpm -C apps/api exec tsx src/db/migrate.ts && pnpm -C apps/api exec tsx src/server.ts"]

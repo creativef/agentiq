@@ -136,6 +136,22 @@ async function main() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `],
+    [`audit_log`, `
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT,
+        user_email TEXT,
+        method TEXT NOT NULL,
+        path TEXT NOT NULL,
+        status_code TEXT NOT NULL,
+        resource_type TEXT,
+        resource_id TEXT,
+        user_agent TEXT,
+        ip TEXT,
+        message TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
   ];
 
   for (const [name, stmt] of tables) {
