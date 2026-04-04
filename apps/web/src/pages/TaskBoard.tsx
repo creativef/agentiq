@@ -78,14 +78,19 @@ export default function TaskBoard() {
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
+    if (!company || !project) return;
+    
     const res = await fetch("/api/tasks", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...form,
+        title: form.title,
+        description: form.description || null,
+        priority: form.priority,
         status: "backlog",
         agentId: form.agentId || null,
+        projectId: project.id,
       }),
     });
     if (res.ok) {

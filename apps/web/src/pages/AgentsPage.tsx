@@ -239,8 +239,8 @@ export default function AgentsPage() {
               </button>
             </div>
 
-            {showCreateSkill ? (
-              <form onSubmit={handleCreateSkill} style={{ marginBottom: "0.75rem" }}>
+            {showCreateSkill && (
+              <div style={{ marginBottom: "0.75rem" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "0.5rem" }}>
                   <input placeholder="Skill name" value={newSkill.name} onChange={e => setNewSkill({...newSkill, name: e.target.value})} required style={{ padding: "6px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
                   <select value={newSkill.category} onChange={e => setNewSkill({...newSkill, category: e.target.value})} style={{ padding: "6px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
@@ -256,9 +256,9 @@ export default function AgentsPage() {
                 </div>
                 <input placeholder="Short description" value={newSkill.description} onChange={e => setNewSkill({...newSkill, description: e.target.value})} style={{ width: "100%", padding: "6px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", marginBottom: "0.5rem", boxSizing: "border-box" }} />
                 <textarea placeholder="Instructions (system prompt for the agent)" value={newSkill.instructions} onChange={e => setNewSkill({...newSkill, instructions: e.target.value})} required style={{ width: "100%", padding: "6px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", minHeight: "60px", marginBottom: "0.5rem", boxSizing: "border-box", resize: "vertical" }} />
-                <button type="submit" style={{ padding: "4px 12px", background: "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Create & Attach</button>
-              </form>
-            ) : null}
+                <button type="button" onClick={handleCreateSkill} style={{ padding: "4px 12px", background: "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Create & Attach</button>
+              </div>
+            )}
 
             {/* Selected skills */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "0.5rem" }}>
