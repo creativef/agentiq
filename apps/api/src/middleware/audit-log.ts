@@ -11,7 +11,7 @@ import { db } from "../db/client";
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id"),
-  userEmail: text("user_email"),
+  userEmail: text("email"),
   method: text("method").notNull(), // GET, POST, PUT, DELETE
   path: text("path").notNull(),
   statusCode: text("status_code").notNull(),

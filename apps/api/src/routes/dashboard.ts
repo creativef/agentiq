@@ -140,7 +140,7 @@ dashboard.get("/companies/:companyId/dashboard", async (c) => {
     .groupBy(tasks.status);
 
   const recentEvents = await db
-    .select({ id: events.id, type: events.type, payload: events.payload, createdAt: events.createdAt })
+    .select({ id: events.id, type: events.type, meta: events.meta, createdAt: events.createdAt })
     .from(events)
     .where(sql`${events.companyId} = ${companyId}`)
     .orderBy(sql`${events.createdAt} DESC`)
