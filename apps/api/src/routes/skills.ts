@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { skills, agentSkills, agents, companyMembers } from "../db/schema";
+import { skills, agentSkills, agents, companyMembers, skillBundles, bundleSkills, agentBundles } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 import { parseSkillsMarkdown } from "../utils/skillParser";
 
@@ -203,4 +203,224 @@ skillsRouter.post("/companies/:companyId/skills/import", async (c) => {
     assigned,
     skillIds: Object.fromEntries(skillIdMap),
   });
+});
+
+// ============================================================
+// SKILL BUNDLES — Role-based skill collections
+// ============================================================
+
+// GET /skill-bundles — list all available bundles
+skillsRouter.get("/skill-bundles", async (c) => {
+  const rows = await db
+    .select()
+    .from(skillBundles)
+    .where(sql`${skillBundles.isActive} = true`)
+    .orderBy(skillBundles.role, skillBundles.name);
+
+  // Enrich each bundle with its skills
+  const enriched = await Promise.all(
+    rows.map(async (bundle) => {
+      const bSkills = await db
+        .select({ skillId: bundleSkills.skillId, name: skills.name, category: skills.category, sortOrder: bundleSkills.sortOrder })
+        .from(bundleSkills)
+        .innerJoin(skills, sql`${bundleSkills.skillId} = ${skills.id}`)
+        .where(sql`${bundleSkills.bundleId} = ${bundle.id}`)
+        .orderBy(bundleSkills.sortOrder);
+
+      return { ...bundle, skills: bSkills };
+    }),
+  );
+
+  return c.json({ bundles: enriched });
+});
+
+// GET /skill-bundles/:bundleId/skills — get skills in a specific bundle
+skillsRouter.get("/skill-bundles/:bundleId/skills", async (c) => {
+  const bundleId = c.req.param("bundleId");
+
+  const bundleCheck = await db.select().from(skillBundles).where(sql`${skillBundles.id} = ${bundleId}`).limit(1);
+  if (bundleCheck.length === 0) return c.json({ error: "Bundle not found" }, 404);
+
+  const bSkills = await db
+    .select({
+      skillId: bundleSkills.skillId,
+      name: skills.name,
+      category: skills.category,
+      description: skills.description,
+      instructions: skills.instructions,
+      icon: skills.icon,
+      sortOrder: bundleSkills.sortOrder,
+      isRequired: bundleSkills.isRequired,
+    })
+    .from(bundleSkills)
+    .innerJoin(skills, sql`${bundleSkills.skillId} = ${skills.id}`)
+    .where(sql`${bundleSkills.bundleId} = ${bundleId}`)
+    .orderBy(bundleSkills.sortOrder);
+
+  return c.json({ bundle: bundleCheck[0], skills: bSkills });
+});
+
+// POST /agents/:agentId/bundles/:bundleId — assign a skill bundle to an agent
+skillsRouter.post("/agents/:agentId/bundles/:bundleId", async (c) => {
+  const { agentId, bundleId } = c.req.param();
+  const user: UserPayload = c.get("user");
+  const body = await c.req.json().catch(() => ({}));
+
+  // Verify agent access
+  const agentCheck = await db.select({ companyId: agents.companyId }).from(agents).where(sql`${agents.id} = ${agentId}`).limit(1);
+  if (agentCheck.length === 0) return c.json({ error: "Agent not found" }, 404);
+
+  const access = await db
+    .select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${agentCheck[0].companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  // Verify bundle exists
+  const bundleCheck = await db.select().from(skillBundles).where(sql`${skillBundles.id} = ${bundleId}`).limit(1);
+  if (bundleCheck.length === 0) return c.json({ error: "Bundle not found" }, 404);
+
+  // Record the bundle assignment
+  try {
+    await db.insert(agentBundles).values({
+      agentId,
+      bundleId,
+      assignedBy: user.userId,
+      status: "active",
+    });
+  } catch {
+    // Bundle may have been previously assigned — that's OK, continue
+  }
+
+  // Look up skills in this bundle
+  const bSkills = await db
+    .select({ skillId: bundleSkills.skillId, sortOrder: bundleSkills.sortOrder })
+    .from(bundleSkills)
+    .where(sql`${bundleSkills.bundleId} = ${bundleId}`)
+    .orderBy(bundleSkills.sortOrder);
+
+  // Get already-assigned skills to avoid duplicates
+  const existing = await db
+    .select({ skillId: agentSkills.skillId })
+    .from(agentSkills)
+    .where(sql`${agentSkills.agentId} = ${agentId}`);
+  const existingSkillIds = new Set(existing.map((e) => e.skillId));
+
+  // Add new skills (skip duplicates)
+  let assigned = 0;
+  let skipped = 0;
+  for (const bs of bSkills) {
+    if (existingSkillIds.has(bs.skillId)) {
+      skipped++;
+      continue;
+    }
+    await db.insert(agentSkills).values({
+      agentId,
+      skillId: bs.skillId,
+      customInstructions: body.customInstructions || null,
+    });
+    assigned++;
+  }
+
+  return c.json({
+    bundle: bundleCheck[0].name,
+    assigned,
+    skipped,
+    total: bSkills.length,
+  });
+});
+
+// DELETE /agents/:agentId/bundles/:bundleId — remove a bundle from an agent
+skillsRouter.delete("/agents/:agentId/bundles/:bundleId", async (c) => {
+  const { agentId, bundleId } = c.req.param();
+  const user: UserPayload = c.get("user");
+
+  // Verify agent access
+  const agentCheck = await db.select({ companyId: agents.companyId }).from(agents).where(sql`${agents.id} = ${agentId}`).limit(1);
+  if (agentCheck.length === 0) return c.json({ error: "Agent not found" }, 404);
+
+  const access = await db
+    .select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${agentCheck[0].companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  // Mark bundle as removed
+  await db
+    .update(agentBundles)
+    .set({ status: "removed" })
+    .where(sql`${agentBundles.agentId} = ${agentId} AND ${agentBundles.bundleId} = ${bundleId}`);
+
+  // Get the skills that came from this bundle
+  const bSkills = await db
+    .select({ skillId: bundleSkills.skillId })
+    .from(bundleSkills)
+    .where(sql`${bundleSkills.bundleId} = ${bundleId}`);
+
+  const bundleSkillIds = bSkills.map((bs) => bs.skillId);
+
+  // Remove skills ONLY if no other active bundle also provides them
+  let removed = 0;
+  const otherBundles = await db
+    .select({ bundleId: agentBundles.bundleId })
+    .from(agentBundles)
+    .where(sql`${agentBundles.agentId} = ${agentId} AND ${agentBundles.status} = 'active' AND ${agentBundles.bundleId} != ${bundleId}`);
+
+  const otherBundleIds = otherBundles.map((ob) => ob.bundleId);
+  const otherProvided = new Set<string>();
+
+  for (const obId of otherBundleIds) {
+    const otherSkills = await db
+      .select({ skillId: bundleSkills.skillId })
+      .from(bundleSkills)
+      .where(sql`${bundleSkills.bundleId} = ${obId}`);
+    for (const os of otherSkills) otherProvided.add(os.skillId);
+  }
+
+  for (const skillId of bundleSkillIds) {
+    if (!otherProvided.has(skillId)) {
+      await db
+        .delete(agentSkills)
+        .where(sql`${agentSkills.agentId} = ${agentId} AND ${agentSkills.skillId} = ${skillId}`);
+      removed++;
+    }
+  }
+
+  return c.json({ removed, kept: bundleSkillIds.length - removed });
+});
+
+// POST /skill-bundles — create a custom skill bundle
+skillsRouter.post("/skill-bundles", async (c) => {
+  const user: UserPayload = c.get("user");
+  const body = await c.req.json().catch(() => ({}));
+
+  if (!body.name || !body.role || !body.skillIds || !Array.isArray(body.skillIds)) {
+    return c.json({ error: "name, role, and skillIds[] are required" }, 400);
+  }
+
+  // Create the bundle
+  const [bundle] = await db
+    .insert(skillBundles)
+    .values({
+      name: body.name,
+      role: body.role,
+      description: body.description || null,
+      icon: body.icon || "📦",
+      companyId: body.companyId || null,
+    })
+    .returning();
+
+  // Link skills
+  for (let i = 0; i < body.skillIds.length; i++) {
+    await db.insert(bundleSkills).values({
+      bundleId: bundle.id,
+      skillId: body.skillIds[i],
+      sortOrder: i,
+      isRequired: body.requiredIds?.includes(body.skillIds[i]) ?? true,
+    });
+  }
+
+  return c.json({ bundle: { ...bundle, skillCount: body.skillIds.length } });
 });
