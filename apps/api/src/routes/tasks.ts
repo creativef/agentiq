@@ -1,17 +1,16 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { tasks, agents, projects, companyMembers, companies, events as eventsTable } from "../db/schema";
+import { tasks, agents, projects, companyMembers, companies } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 
 export const tasksRouter = new Hono();
 tasksRouter.use(authMiddleware);
 
-// GET /tasks - list tasks, with approvals filter
+// GET /tasks
 tasksRouter.get("/tasks", async (c) => {
   const user: UserPayload = c.get("user");
   const projectId = c.req.query("projectId") || null;
-  const status = c.req.query("status") || null;
 
   const baseQuery = db
     .select({
@@ -37,7 +36,6 @@ tasksRouter.get("/tasks", async (c) => {
   let rows = await baseQuery;
 
   if (projectId) rows = rows.filter((t) => t.projectId === projectId);
-  if (status) rows = rows.filter((t) => t.status === status);
 
   // Enrich with agent names
   const agentIds = rows.map((t) => t.agentId).filter(Boolean);
@@ -52,7 +50,7 @@ tasksRouter.get("/tasks", async (c) => {
   return c.json({ tasks: rows });
 });
 
-// GET /tasks/approvals - tasks pending approval for user
+// GET /tasks/approvals
 tasksRouter.get("/tasks/approvals", async (c) => {
   const user: UserPayload = c.get("user");
   const rows = await db
@@ -71,7 +69,6 @@ tasksRouter.get("/tasks/approvals", async (c) => {
     .where(sql`
       ${tasks.approvalStatus} = 'pending' 
       AND ${companyMembers.userId} = ${user.userId}
-      AND (tasks.approver_role = company_members.role OR tasks.approver_role IS NULL)
     `);
 
   return c.json({ approvals: rows });
@@ -82,7 +79,6 @@ tasksRouter.post("/tasks", async (c) => {
   const user: UserPayload = c.get("user");
   const body = await c.req.json();
 
-  // Determine initial status
   let execStatus = "idle";
   let approvalStatus = null;
   let taskStatus = "backlog";
@@ -113,7 +109,6 @@ tasksRouter.post("/tasks", async (c) => {
     })
     .returning();
 
-  // If no approval needed and no schedule, mark ready to run
   if (!approvalStatus && !body.scheduledAt) {
     execStatus = "ready";
     await db.update(tasks).set({ execStatus }).where(sql`${tasks.id} = ${newTask[0].id}`);
@@ -122,50 +117,7 @@ tasksRouter.post("/tasks", async (c) => {
   return c.json({ task: newTask[0] });
 });
 
-// PUT /tasks/:id
-tasksRouter.put("/tasks/:taskId", async (c) => {
-  const taskId = c.req.param("taskId");
-  const body = await c.req.json();
-  const updates: any = {};
-
-  if (body.status !== undefined) updates.status = body.status;
-  if (body.priority !== undefined) updates.priority = body.priority;
-  if (body.title !== undefined) updates.title = body.title;
-  if (body.description !== undefined) updates.description = body.description;
-  if (body.agentId !== undefined) updates.agentId = body.agentId || null;
-  if (body.scheduledAt !== undefined) updates.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
-  if (body.execStatus !== undefined) updates.execStatus = body.execStatus;
-
-  await db.update(tasks).set(updates).where(sql`${tasks.id} = ${taskId}`);
-  return c.json({ ok: true });
-});
-
-// POST /tasks/:id/approve - Approve a pending task
-tasksRouter.post("/tasks/:taskId/approve", async (c) => {
-  const taskId = c.req.param("taskId");
-  const user: UserPayload = c.get("user");
-
-  // TODO Verify user has approver role (simple pass for now)
-  await db.update(tasks).set({
-    approvalStatus: "approved",
-    execStatus: "ready",
-  }).where(sql`${tasks.id} = ${taskId}`);
-
-  return c.json({ ok: true });
-});
-
-// POST /tasks/:id/reject - Reject a pending task
-tasksRouter.post("/tasks/:taskId/reject", async (c) => {
-  const taskId = c.req.param("taskId");
-  await db.update(tasks).set({
-    approvalStatus: "rejected",
-    execStatus: "failed",
-  }).where(sql`${tasks.id} = ${taskId}`);
-
-  return c.json({ ok: true });
-});
-
-// POST /tasks/:taskId/execute - Run the task via execution engine
+// POST /tasks/:taskId/execute
 tasksRouter.post("/tasks/:taskId/execute", async (c) => {
   const taskId = c.req.param("taskId");
   
@@ -185,28 +137,42 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
     const titleLower = task.title.toLowerCase();
 
     // Case: "Hire [Role]" or "Create [Role] Agent"
-    if (titleLower.includes("hire") || titleLower.includes("create agent")) {
-      const roleMatch = titleLower.match(/(?:hire|create)\s+(?:a|an|the)?\s*(\w+)/i);
+    if (titleLower.includes("hire") || titleLower.includes("create agent") || titleLower.includes("found")) {
+      const roleMatch = titleLower.match(/(?:hire|create|found)\s+(?:a|an|the)?\s*([\w\s]+)/i);
       if (roleMatch) {
-        const role = roleMatch[1].toUpperCase();
-        const agentName = `${role.charAt(0) + role.slice(1)} Agent`;
+        let roleName = roleMatch[1].trim().toUpperCase();
+        if (roleName.includes("AGENT")) roleName = "AGENT";
+        else if (roleName.includes("CEO")) roleName = "CEO";
+        else if (roleName.includes("MANAGER")) roleName = "MANAGER";
+        else if (roleName.includes("CTO")) roleName = "CTO";
+        else if (roleName.includes("CFO")) roleName = "CFO";
+
+        const agentName = `${roleName.charAt(0) + roleName.slice(1).toLowerCase()}`;
+        
+        // Safely fetch companyId
+        const projCheck = await db.select({ companyId: projects.companyId })
+          .from(projects)
+          .where(sql`${projects.id} = ${task.projectId}`)
+          .limit(1);
+          
+        if (projCheck.length === 0) throw new Error("Project ID is invalid, cannot determine Company.");
+
+        // Create Agent dynamically
         const newAgent = await db.insert(agents).values({
-          companyId: await sql`SELECT company_id FROM projects WHERE id = ${task.projectId}`, // Suboptimal, simplify later
+          companyId: projCheck[0].companyId,
           projectId: task.projectId,
           name: agentName,
-          role: role === "CEO" ? "CEO" : role === "CTO" ? "CTO" : "AGENT",
+          role: roleName,
           status: "idle",
-          createdAt: new Date(),
         }).returning();
 
-        resultText = `Created new agent "${agentName}" (ID: ${newAgent[0].id}).`;
+        resultText = `✅ Success! Hired "${agentName}" as ${roleName}. They are now added to the Org Chat and ready for work.`;
       } else {
-        resultText = "Could not determine which agent role to create based on title.";
+        resultText = "❌ Failed. I couldn't understand which role to hire. (e.g., 'Hire CTO')";
         success = false;
       }
     } else {
-      // Default simulation
-      resultText = `Task completed. (Placeholder: Real agent execution logic would hook in here).`;
+      resultText = `✅ Task completed. (Placeholder: Real agent execution logic would run here).`;
     }
 
     // 3. Finish
@@ -226,6 +192,24 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
   }
 
   return c.json({ success, result: resultText });
+});
+
+// PUT /tasks/:id
+tasksRouter.put("/tasks/:taskId", async (c) => {
+  const taskId = c.req.param("taskId");
+  const body = await c.req.json();
+  const updates: any = {};
+
+  if (body.status !== undefined) updates.status = body.status;
+  if (body.priority !== undefined) updates.priority = body.priority;
+  if (body.title !== undefined) updates.title = body.title;
+  if (body.description !== undefined) updates.description = body.description;
+  if (body.agentId !== undefined) updates.agentId = body.agentId || null;
+  if (body.scheduledAt !== undefined) updates.scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : null;
+  if (body.execStatus !== undefined) updates.execStatus = body.execStatus;
+
+  await db.update(tasks).set(updates).where(sql`${tasks.id} = ${taskId}`);
+  return c.json({ ok: true });
 });
 
 // DELETE /tasks/:id
