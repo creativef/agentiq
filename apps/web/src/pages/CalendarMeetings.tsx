@@ -7,12 +7,16 @@ export default function CalendarMeetings() {
   const [form, setForm] = useState({ title: "", date: "", time: "", agenda: "" });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchEvents = () => {
     fetch("/api/calendar", { credentials: "include" })
       .then(r => r.ok ? r.json() : null)
       .then(d => setEvents(d?.events || []))
       .catch(console.error)
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchEvents();
   }, []);
 
   const year = currentMonth.getFullYear();
@@ -41,7 +45,7 @@ export default function CalendarMeetings() {
     if (res.ok) {
       setShowForm(false);
       setForm({ title: "", date: "", time: "", agenda: "" });
-      window.location.reload();
+      fetchEvents();
     }
   };
 

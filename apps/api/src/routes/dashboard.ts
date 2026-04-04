@@ -215,4 +215,41 @@ dashboard.get("/companies/:companyId/members", async (c) => {
   return c.json({ members });
 });
 
+// POST /companies/:companyId/members — add a member to a company
+dashboard.post("/companies/:companyId/members", async (c) => {
+  const user: UserPayload = c.get("user");
+  const companyId = c.req.param("companyId");
+
+  // Verify requester is already a member
+  const access = await db.select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  const body = await c.req.json().catch(() => ({}));
+  if (!body.email) return c.json({ error: "Email is required" }, 400);
+
+  // Find existing user by email
+  const existing = await db.select().from(users).where(sql`${users.email} = ${body.email}`).limit(1);
+  if (existing.length === 0) {
+    return c.json({ error: "User not found. They need to register first." }, 404);
+  }
+
+  // Check if already a member
+  const alreadyMember = await db.select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${existing[0].id}`)
+    .limit(1);
+  if (alreadyMember.length > 0) return c.json({ error: "Already a member" }, 400);
+
+  const result = await db.insert(companyMembers).values({
+    companyId,
+    userId: existing[0].id,
+    role: body.role || "CEO",
+  }).returning();
+
+  return c.json({ member: { userId: existing[0].id, email: existing[0].email, role: body.role || "CEO" } });
+});
+
 export { dashboard };

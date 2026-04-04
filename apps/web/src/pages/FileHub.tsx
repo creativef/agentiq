@@ -11,6 +11,8 @@ interface FileItem {
 export default function FileHub() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/files", { credentials: "include" })
@@ -23,14 +25,27 @@ export default function FileHub() {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploading(true);
+    setUploadError(null);
     const formData = new FormData();
     formData.append("file", file);
-    await fetch("/api/files", {
-      method: "POST",
-      credentials: "include",
-      body: formData,
-    });
-    window.location.reload();
+    try {
+      const res = await fetch("/api/files", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (res.ok) {
+        setFiles(prev => [...prev, { id: Date.now().toString(), name: file.name, size: file.size, type: file.type || "unknown", createdAt: new Date().toISOString() }]);
+      } else {
+        setUploadError("Upload failed: " + (res.status || "Unknown error"));
+      }
+    } catch (err: any) {
+      setUploadError(err.message || "Network error during upload");
+    } finally {
+      setUploading(false);
+      if (e.target) e.target.value = "";
+    }
   };
 
   const formatSize = (bytes: number) => {

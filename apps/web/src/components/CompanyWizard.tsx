@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 
 /** Agent role templates for the wizard */
 export const agentTemplates = [

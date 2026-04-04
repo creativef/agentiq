@@ -1,11 +1,10 @@
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
 interface Member {
   id: string;
-  email: string;
+  email: string | null;
   role: string;
-  createdAt: string | null;
 }
 
 export default function CompanySettings() {
@@ -13,23 +12,27 @@ export default function CompanySettings() {
   const [name, setName] = useState(company?.name || "");
   const [goal, setGoal] = useState(company?.goal || "");
   const [members, setMembers] = useState<Member[]>([]);
-  const [saved, setSaved] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("CEO");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   useEffect(() => {
-    setName(company?.name || "");
-    setGoal(company?.goal || "");
+    if (company) {
+      setName(company.name);
+      setGoal(company.goal);
+    }
   }, [company]);
 
   useEffect(() => {
     if (!company) return;
     fetch(`/api/companies/${company.id}/members`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setMembers(d?.members || []))
+      .then(r => r.json())
+      .then(d => setMembers(d.members || []))
       .catch(console.error);
   }, [company]);
 
-  const handleSave = async (e: FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!company) return;
     const res = await fetch(`/api/companies/${company.id}`, {
@@ -39,14 +42,39 @@ export default function CompanySettings() {
       body: JSON.stringify({ name, goal }),
     });
     if (res.ok) {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      alert("Settings saved!");
+    } else {
+      const err = await res.json();
+      alert(err.error || "Failed to save settings");
     }
   };
 
   const handleInvite = async () => {
-    // TODO: POST /api/companies/:id/members
-    setInviteEmail("");
+    if (!inviteEmail.trim() || !company) return;
+    setInviteLoading(true);
+    setInviteError(null);
+    try {
+      const res = await fetch(`/api/companies/${company.id}/members`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInviteEmail("");
+        // Refresh members list
+        fetch(`/api/companies/${company.id}/members`, { credentials: "include" })
+          .then(r => r.json())
+          .then(d => setMembers(d.members || []));
+      } else {
+        setInviteError(data.error || "Failed to add member");
+      }
+    } catch (e: any) {
+      setInviteError(e.message || "Network error");
+    } finally {
+      setInviteLoading(false);
+    }
   };
 
   return (
@@ -91,9 +119,15 @@ export default function CompanySettings() {
             )}
 
             <div style={{ display: "flex", gap: "0.5rem" }}>
-              <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="Email to invite" style={{ flex: 1, padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
-              <button onClick={handleInvite} style={{ padding: "8px 16px", background: "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>Invite</button>
+              <input value={inviteEmail} onChange={e => { setInviteEmail(e.target.value); setInviteError(null); }} placeholder="Email to invite" style={{ flex: 1, padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
+              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
+                <option value="CEO">CEO</option>
+                <option value="MANAGER">Manager</option>
+                <option value="AGENT">Agent</option>
+              </select>
+              <button onClick={handleInvite} disabled={inviteLoading} style={{ padding: "8px 16px", background: inviteLoading ? "#6b7280" : "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: inviteLoading ? "wait" : "pointer" }}>{inviteLoading ? "Adding..." : "Invite"}</button>
             </div>
+            {inviteError && <div style={{ marginTop: "0.5rem", padding: "6px 10px", background: "#450a0a", borderRadius: "4px", color: "#fca5a5", fontSize: "0.8rem" }}>{inviteError}</div>}
           </div>
         </div>
       )}

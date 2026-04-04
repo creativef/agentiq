@@ -14,45 +14,35 @@ export default function DashboardPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [stats, setStats] = useState<{ totalAgents: number; activeAgents: number; totalTasks: number; completedTasks: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!company) { setLoading(false); return; }
+  const refreshDashboard = () => {
+    if (!company) { setError(null); setLoading(false); return; }
+    setError(null);
     setLoading(true);
-    fetch(`/api/companies/${company.id}/agents`, { credentials: "include" })
-      .then(r => r.json())
-      .then(data => {
-        setAgents(data.agents || []);
+    Promise.all([
+      fetch(`/api/companies/${company.id}/dashboard`, { credentials: "include" }),
+      fetch(`/api/companies/${company.id}/agents`, { credentials: "include" }),
+    ])
+      .then(async ([dashRes, agentsRes]) => {
+        const dashData = dashRes.ok ? await dashRes.json() : null;
+        const agentsData = agentsRes.ok ? await agentsRes.json() : null;
+
+        if (dashData?.stats) setStats(dashData.stats);
+        if (agentsData?.agents) setAgents(agentsData.agents);
+        if (dashData?.timeline) setEvents(dashData.timeline);
+        else setEvents([]);
       })
-      .catch(console.error)
+      .catch(err => {
+        console.error(err);
+        setError(err.message || "Failed to connect to server");
+      })
       .finally(() => setLoading(false));
-  }, [company]);
+  };
 
   useEffect(() => {
-    if (!company) return;
-    fetch(`/api/companies/${company.id}/dashboard`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data) setStats(data.stats);
-      })
-      .catch(console.error);
-  }, [company]);
-
-  useEffect(() => {
-    if (!company) return;
-    fetch(`/api/companies/${company.id}/dashboard`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data) {
-          setStats(data.stats);
-          // Scope events by project if selected
-          const timeline = data.timeline || [];
-          setEvents(project ? timeline.filter((e: any) => {
-            // We'd need project data in events - for now show all
-            return true;
-          }) : timeline);
-        }
-      });
+    refreshDashboard();
   }, [company, project]);
 
   if (!company) {
@@ -66,6 +56,24 @@ export default function DashboardPage() {
 
   if (loading) {
     return <div style={{ padding: "2rem", color: "#888" }}>Loading...</div>;
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: "2rem" }}>
+        <div style={{ background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: "8px", padding: "1.5rem", textAlign: "center" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>⚠️</div>
+          <h2 style={{ color: "#fca5a5", margin: "0 0 0.5rem 0" }}>Connection Error</h2>
+          <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>{error}</p>
+          <button
+            onClick={refreshDashboard}
+            style={{ marginTop: "1rem", padding: "8px 24px", background: "#dc2626", border: "none", color: "white", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+          >
+            ↻ Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const kpis = [

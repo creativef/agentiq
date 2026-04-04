@@ -114,6 +114,10 @@ export default function AgentsPage() {
       .catch(() => setAvailableSkills([]));
   };
 
+  useEffect(() => {
+    loadAvailableSkills();
+  }, []);
+
   const assignSkill = async (skillId: string) => {
     if (!editing) return;
     await fetch(`/api/agents/${editing.id}/skills`, {
@@ -253,9 +257,9 @@ export default function AgentsPage() {
                           <button onClick={() => removeSkill(s.id)} style={{ background: "none", border: "none", color: "white", cursor: "pointer", fontSize: "0.8rem", padding: "0 2px" }}>×</button>
                         </span>
                       ))}
-                      {!showSkillPicker && (
-                        <button onClick={() => { loadAvailableSkills(); setShowSkillPicker(true); }} style={{ background: "none", border: "1px dashed #4B5563", borderRadius: "12px", padding: "2px 8px", fontSize: "0.7rem", color: "#9ca3af", cursor: "pointer" }}>+ Skill</button>
-                      )}
+              {!showSkillPicker && (
+                <button onClick={() => setShowSkillPicker(true)} style={{ background: "none", border: "1px dashed #4B5563", borderRadius: "12px", padding: "2px 8px", fontSize: "0.7rem", color: "#9ca3af", cursor: "pointer" }}>+ Skill</button>
+              )}
                     </div>
                     {showSkillPicker && (
                       <div style={{ background: "#111827", border: "1px solid #374151", borderRadius: "6px", padding: "8px", maxHeight: "200px", overflow: "auto" }}>

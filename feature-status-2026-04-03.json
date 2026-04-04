@@ -1,0 +1,237 @@
+[
+  {
+    "name": "Authentication",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/auth.ts — register/login/logout/me endpoints",
+      "apps/api/src/middleware/auth.ts — JWT verification + user existence guard",
+      "apps/api/src/middleware/rate-limiter.ts — rate limiting on auth endpoints",
+      "apps/web/src/contexts/AuthContext.tsx — full login/register flow with cookie handling",
+      "apps/web/src/pages/Login.tsx — login UI with error feedback"
+    ],
+    "blockers": [],
+    "recommended_next_step": "E2E test: login → protected route access → logout → redirect to login"
+  },
+  {
+    "name": "Company Management",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/dashboard.ts — GET/POST/PUT /companies + GET /companies/:id/members",
+      "apps/api/src/routes/dashboard.ts — create seeds companyMembers (OWNER role)",
+      "apps/web/src/layouts/DashboardLayout.tsx — company switcher + new company wizard modal",
+      "apps/web/src/components/CompanyWizard.tsx — 4-step onboarding wizard"
+    ],
+    "blockers": [],
+    "recommended_next_step": "Test multi-company switching with data isolation"
+  },
+  {
+    "name": "Projects",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/projects.ts — full CRUD (GET/POST/PUT/DELETE) + GET /:id/stats",
+      "apps/api/src/routes/dashboard.ts — POST /companies creates multiple projects from wizard payload",
+      "apps/web/src/pages/ProjectsPage.tsx — full CRUD UI with inline editing",
+      "apps/web/src/layouts/DashboardLayout.tsx — project switcher in sidebar",
+      "apps/web/src/pages/AgentsPage.tsx — agents scoped by projectId query param",
+      "apps/web/src/pages/TaskBoard.tsx — tasks scoped by projectId query param"
+    ],
+    "blockers": [],
+    "recommended_next_step": "Test project scoping: agents/tasks for different projects are isolated"
+  },
+  {
+    "name": "Agents",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/agents.ts — full CRUD + /tree endpoint for hierarchy",
+      "apps/api/src/routes/agents.ts — reportsTo column + company access check on PUT/DELETE",
+      "apps/web/src/pages/AgentsPage.tsx — full CRUD UI, edit mode with reportsTo + skills",
+      "apps/api/src/db/schema.ts — agents table has reportsTo, platform, externalId, skill joins"
+    ],
+    "blockers": [],
+    "recommended_next_step": "Test reporting hierarchy: CEO→Founder, all Agents→Manager"
+  },
+  {
+    "name": "Tasks",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/tasks.ts — full CRUD (GET/POST/PUT/DELETE) with company scoping",
+      "apps/web/src/pages/TaskBoard.tsx — kanban with drag-drop, create/delete tasks",
+      "apps/web/src/pages/TaskBoard.tsx — tasks scoped by project"
+    ],
+    "blockers": [],
+    "recommended_next_step": "Test drag-drop persistence: change status triggers PUT call"
+  },
+  {
+    "name": "Reporting Hierarchy",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/db/schema.ts — agents.reportsTo (self-referencing FK)",
+      "apps/api/src/routes/agents.ts — GET /:companyId/tree returns hierarchical org tree",
+      "apps/web/src/pages/CompanyOrg.tsx — renders tree by reportsTo relationships",
+      "apps/api/src/routes/agents.ts — PUT /agents/:id accepts reportsTo field",
+      "CompanyWizard assigns reportsTo on company creation based on role"
+    ],
+    "blockers": [],
+    "recommended_next_step": "Edit an agent's reportsTo in UI, verify org chart updates"
+  },
+  {
+    "name": "Skills",
+    "status": "Partially operational",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/db/schema.ts — skills + agent_skills tables",
+      "apps/api/src/routes/skills.ts — full CRUD + import endpoints",
+      "apps/api/src/utils/skillParser.ts — parses markdown into skills",
+      "apps/web/src/pages/AgentsPage.tsx — skill picker in agent edit mode",
+      "CompanyWizard assigns role-based default skills on company creation"
+    ],
+    "blockers": [
+      "UI only accessible through agent edit mode; no standalone skills page",
+      "Parser tested only on simple ## heading format; not tested against GStack-style SKILL.md files",
+      "Skills are not fetched on initial page load; loaded on demand in edit mode"
+    ],
+    "recommended_next_step": "Test skill import with a real GStack SKILL.md file"
+  },
+  {
+    "name": "Connectors/Integrations",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/connectors.ts — full CRUD for connector configs",
+      "apps/api/src/connectors/index.ts — registry with Hermes + OpenClaw",
+      "apps/api/src/connectors/hermes.ts — Hermes webhook + event normalization",
+      "apps/api/src/connectors/openclaw.ts — OpenClaw webhook with secret validation",
+      "apps/web/src/pages/ConnectorsPage.tsx — UI for connector management",
+      "apps/api/src/routes/agents.ts — POST /connectors/:platform/webhook — auto-registers agents"
+    ],
+    "blockers": [
+      "Requires actual Hermes/OpenClaw servers running to receive webhooks"
+    ],
+    "recommended_next_step": "Connect a real OpenClaw instance to verify webhook flow"
+  },
+  {
+    "name": "Dashboard",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/dashboard.ts — GET /companies/:id/dashboard returns stats + agents + events",
+      "apps/web/src/pages/DashboardPage.tsx — renders KPIs, status wall, activity timeline",
+      "Company switcher + project selector in dashboard header"
+    ],
+    "blockers": [],
+    "recommended_next_step": "Test with populated data: verify KPIs update correctly"
+  },
+  {
+    "name": "Calendar",
+    "status": "Non-functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/calendar.ts — GET returns {events: []}, POST returns {ok: true}",
+      "No calendar_events table in schema.ts",
+      "apps/web/src/pages/CalendarMeetings.tsx — renders month view but gets empty data"
+    ],
+    "blockers": [
+      "Missing database table",
+      "No real GET/POST event logic",
+      "No company scoping on fetch"
+    ],
+    "recommended_next_step": "Create calendar_events table, implement full CRUD"
+  },
+  {
+    "name": "Chat",
+    "status": "Non-functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/chat.ts — POST returns {ok: true}, no GET endpoint",
+      "No chat_messages table in schema.ts",
+      "apps/web/src/pages/ChatJournal.tsx — renders chat UI but fetches empty data"
+    ],
+    "blockers": [
+      "Missing database table",
+      "No GET /chat endpoint",
+      "No message persistence"
+    ],
+    "recommended_next_step": "Create chat_messages table, implement GET + POST with company scoping"
+  },
+  {
+    "name": "Files",
+    "status": "Non-functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/files.ts — POST returns {ok: true}, no GET/DELETE",
+      "No files table in schema.ts",
+      "No file storage layer (local disk or cloud)",
+      "apps/web/src/pages/FileHub.tsx — uploads to /api/files which does nothing"
+    ],
+    "blockers": [
+      "Missing database table for metadata",
+      "No file storage backend",
+      "No multipart/form-data handling",
+      "No download endpoint"
+    ],
+    "recommended_next_step": "Implement file storage: choose local disk or S3, add metadata table"
+  },
+  {
+    "name": "Goals",
+    "status": "Partially operational",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/goals.ts — full CRUD (GET/POST/PUT/DELETE)",
+      "apps/api/src/db/schema.ts — goals table exists with companyId, title, progress, parentId",
+      "apps/web/src/App.tsx — no /goals route defined",
+      "Dashboard queries goals for progress calc but no way to create/update goals from UI"
+    ],
+    "blockers": [
+      "No frontend page or route for goals"
+    ],
+    "recommended_next_step": "Add /goals route and page in App.tsx"
+  },
+  {
+    "name": "Realtime Events",
+    "status": "Not implemented",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/realtime.ts — GET /events returns empty string",
+      "No SSE or WebSocket implementation anywhere",
+      "Not used by any frontend page"
+    ],
+    "blockers": [
+      "Not implemented at all"
+    ],
+    "recommended_next_step": "Decide: SSE vs WebSocket; implement minimal push endpoint"
+  },
+  {
+    "name": "Company Settings",
+    "status": "Partially operational",
+    "confidence": "high",
+    "evidence": [
+      "apps/api/src/routes/dashboard.ts — GET /:id/members works",
+      "apps/web/src/pages/CompanySettings.tsx — company edit works with PUT /companies/:id",
+      "CompanySettings.tsx — member list fetches from DB (not mock data)",
+      "CompanySettings.tsx — invite button calls alert() — no POST endpoint"
+    ],
+    "blockers": [
+      "Member invite has no backend endpoint"
+    ],
+    "recommended_next_step": "Add POST /companies/:id/members endpoint"
+  },
+  {
+    "name": "Company Onboarding Wizard",
+    "status": "Fully functional",
+    "confidence": "high",
+    "evidence": [
+      "apps/web/src/components/CompanyWizard.tsx — 4-step wizard (details → projects → team → review)",
+      "apps/api/src/routes/dashboard.ts — POST /companies accepts wizard payload (projects[], agents[] with reporting + skills)",
+      "Modal integration in DashboardLayout.tsx — 'New Company' opens wizard modal",
+      "Auto-assigns skills and reporting hierarchy on creation"
+    ],
+    "blockers": [],
+    "recommended_next_step": "Test end-to-end: wizard → company created with all entities"
+  }
+]
