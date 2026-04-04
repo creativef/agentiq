@@ -48,73 +48,62 @@ dashboard.post("/companies", async (c) => {
 
   const newComp = await db.insert(companies).values({ name, goal }).returning();
   const companyId = newComp[0].id;
-  await db.insert(companyMembers).values({ companyId, userId: user.userId, role: "OWNER" });
 
-  // Create projects
-  const createdProjectIds: string[] = [];
-  if (projectNames.length > 0) {
-    for (const projName of projectNames) {
-      const proj = await db.insert(projects).values({ companyId, name: projName }).returning();
+  await db.transaction(async (tx) => {
+    // 1. Add Owner
+    await tx.insert(companyMembers).values({ companyId, userId: user.userId, role: "OWNER" });
+
+    // 2. Create projects
+    const createdProjectIds: string[] = [];
+    if (projectNames.length > 0) {
+      for (const projName of projectNames) {
+        const proj = await tx.insert(projects).values({ companyId, name: projName }).returning();
+        createdProjectIds.push(proj[0].id);
+      }
+    } else {
+      const proj = await tx.insert(projects).values({ companyId, name: "General Operations" }).returning();
       createdProjectIds.push(proj[0].id);
     }
-  } else {
-    const proj = await db.insert(projects).values({ companyId, name: "General Operations" }).returning();
-    createdProjectIds.push(proj[0].id);
-  }
 
-  // Create agents with reporting hierarchy
-  const firstProjectId = createdProjectIds[0];
-  if (agentDefs && agentDefs.length > 0) {
-    // First pass: create agents WITHOUT reportsTo, track by templateKey
-    const createdAgents = new Map();
-    
-    for (const agent of agentDefs) {
-      const result = await db.insert(agents).values({
-        companyId,
-        projectId: firstProjectId,
-        name: agent.name || "Agent",
-        role: agent.role || "AGENT",
-        status: "idle",
-      }).returning();
-      createdAgents.set(agent.templateKey || agent.name, result[0]);
-    }
+    // 3. Create agents with reporting hierarchy (only if agents provided)
+    const firstProjectId = createdProjectIds[0];
+    if (agentDefs && agentDefs.length > 0) {
+      const createdAgentsMap = new Map();
+      // Pass 1: Insert base agent records
+      for (const agentDef of agentDefs) {
+        const agent = await tx.insert(agents).values({
+          companyId,
+          projectId: firstProjectId,
+          name: agentDef.name || "Agent",
+          role: agentDef.role || "AGENT",
+          status: "idle",
+        }).returning();
+        createdAgentsMap.set(agentDef.name, agent[0].id); // Track for reportsTo
+      }
 
-      // Second pass: resolve reportsTo and assign default skills
-      for (const agent of agentDefs) {
-        const thisAgent = createdAgents.get(agent.templateKey || agent.name);
-        if (!thisAgent) continue;
-        // Resolve reporting
-        if (agent.reportsToRole) {
-          const managerAgent = createdAgents.get(agent.reportsToRole);
-          if (managerAgent) {
-            await db.update(agents)
-              .set({ reportsTo: managerAgent.id })
-              .where(sql`${agents.id} = ${thisAgent.id}`);
-          }
-        }
-        // Assign default skills based on role/category
-        if (agent.defaultSkills && Array.isArray(agent.defaultSkills)) {
-          const skillRows = await db.select({ id: skills.id }).from(skills).where(sql`${skills.id} IN ${agent.defaultSkills}`);
-          for (const skill of skillRows) {
-            await db.insert(agentSkillsTable).values({
-              agentId: thisAgent.id,
-              skillId: skill.id,
-            }).onConflictDoNothing();
+      // Pass 2: Assign reportsTo if provided
+      for (const agentDef of agentDefs) {
+        if ((agentDef as any).reportsTo) {
+          const managerId = createdAgentsMap.get((agentDef as any).reportsTo);
+          const thisAgentId = createdAgentsMap.get(agentDef.name);
+          if (managerId && thisAgentId) {
+            await tx.update(agents).set({ reportsTo: managerId }).where(sql`${agents.id} = ${thisAgentId}`);
           }
         }
       }
-  } else {
-    // Fallback: create default Founder agent
-    await db.insert(agents).values({
-      companyId,
-      projectId: firstProjectId,
-      name: "Founder",
-      role: "FOUNDER",
-      status: "idle",
-    }).returning();
-  }
+    } else {
+      // Fallback: Default Founder agent
+      await tx.insert(agents).values({
+        companyId,
+        projectId: firstProjectId,
+        name: "Founder",
+        role: "FOUNDER",
+        status: "idle",
+      });
+    }
+  });
 
-  return c.json({ company: { id: companyId, name, goal, role: "OWNER", projectCount: createdProjectIds.length, agentCount: agentDefs?.length || 1 } });
+  return c.json({ company: { id: companyId, name, goal, role: "OWNER", projectCount: projectNames.length || 1 } });
 });
 
 // GET /companies/:id/dashboard - overview for a specific company

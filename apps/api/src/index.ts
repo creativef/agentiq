@@ -29,7 +29,16 @@ app.use('/api/*', cors({
   credentials: true,
 }))
 
-app.get("/health", (c) => c.json({ ok: true }));
+import { sql } from 'drizzle-orm';
+
+app.get("/health", async (c) => {
+  try {
+    await db.select(sql`1`);
+    return c.json({ status: "healthy", database: "connected", timestamp: Date.now() });
+  } catch (e) {
+    return c.json({ status: "error", database: "disconnected" }, 503);
+  }
+});
 
 // Public
 app.route("/api", auth);
