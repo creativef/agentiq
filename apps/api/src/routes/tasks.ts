@@ -37,6 +37,10 @@ tasksRouter.get("/tasks", async (c) => {
 
   if (projectId) rows = rows.filter((t) => t.projectId === projectId);
 
+  // Sort by execution status priority: pending_approval > scheduled > ready > running > others
+  const statusOrder = { pending_approval: 0, scheduled: 1, ready: 2, executing: 3, idle: 4, completed: 5, failed: 6 };
+  rows.sort((a, b) => (statusOrder[a.execStatus as keyof typeof statusOrder] ?? 99) - (statusOrder[b.execStatus as keyof typeof statusOrder] ?? 99));
+
   // Enrich with agent names
   const agentIds = rows.map((t) => t.agentId).filter(Boolean);
   if (agentIds.length > 0) {
@@ -115,6 +119,27 @@ tasksRouter.post("/tasks", async (c) => {
   }
 
   return c.json({ task: newTask[0] });
+});
+
+// POST /tasks/:id/approve - Approve a pending task
+tasksRouter.post("/tasks/:taskId/approve", async (c) => {
+  const taskId = c.req.param("taskId");
+  await db.update(tasks).set({
+    approvalStatus: "approved",
+    execStatus: "ready",
+  }).where(sql`${tasks.id} = ${taskId}`);
+  return c.json({ ok: true });
+});
+
+// POST /tasks/:id/reject - Reject a pending task
+tasksRouter.post("/tasks/:taskId/reject", async (c) => {
+  const taskId = c.req.param("taskId");
+  await db.update(tasks).set({
+    approvalStatus: "rejected",
+    execStatus: "failed",
+    status: "blocked",
+  }).where(sql`${tasks.id} = ${taskId}`);
+  return c.json({ ok: true });
 });
 
 // POST /tasks/:taskId/execute
