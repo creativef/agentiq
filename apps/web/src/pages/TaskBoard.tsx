@@ -66,7 +66,10 @@ export default function TaskBoard() {
   useEffect(() => {
     const url = project ? `/api/tasks?projectId=${project.id}` : "/api/tasks";
     fetch(url, { credentials: "include" })
-      .then(r => r.json())
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d) setTasks(d.tasks || []);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [company, project]);
