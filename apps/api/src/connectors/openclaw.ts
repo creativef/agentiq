@@ -12,8 +12,9 @@ export const openclawConnector: ConnectorDef = {
   ],
 
   validateWebhook(raw: any, headers: Record<string, string>, secret: string): boolean {
+    // Security: Always require a valid secret match if one exists
     const provided = headers["x-webhook-secret"] || headers["x-openclaw-signature"];
-    if (!secret) return true; // Allow if no secret configured
+    if (!secret) return false; // Reject if no secret configured
     return provided === secret;
   },
 
@@ -41,23 +42,15 @@ export const openclawConnector: ConnectorDef = {
     const timeoutId = setTimeout(() => controller.abort(), 5000); // 5-second timeout
 
     try {
-      const res = await fetch(`${urlObj.origin}/api/agents`, {
-        signal: controller.signal
-      });
+      const res = await fetch(`${urlObj.origin}/api/agents`, { signal: controller.signal });
       if (!res.ok) return [];
       const data = await res.json();
       return (data.agents || []).map((a: any) => ({
-        id: a.id,
-        name: a.name,
-        role: a.role,
-        status: a.status,
+        id: a.id, name: a.name, role: a.role, status: a.status,
       }));
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        console.warn(`OpenClaw discovery timed out for ${baseUrl}`);
-      } else {
-        console.error(`OpenClaw discovery failed: ${error.message}`);
-      }
+      if (error.name === 'AbortError') console.warn(`OpenClaw discovery timed out for ${baseUrl}`);
+      else console.error(`OpenClaw discovery failed: ${error.message}`);
       return [];
     } finally {
       clearTimeout(timeoutId);
