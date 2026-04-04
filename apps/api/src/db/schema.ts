@@ -155,3 +155,13 @@ export const chatMessages = pgTable("chat_messages", {
   role: text("role").notNull().default("user"), // 'user', 'agent', 'system'
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const files = pgTable("files", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  fileName: text("file_name").notNull(),
+  fileType: text("file_type"),
+  fileSize: integer("file_size"),
+  filePath: text("file_path").notNull(), // Path on disk relative to storage root
+  createdAt: timestamp("created_at").defaultNow(),
+});

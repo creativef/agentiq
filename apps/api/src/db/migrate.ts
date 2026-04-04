@@ -318,6 +318,21 @@ async function main() {
   `);
   console.log("  [OK] chat_messages");
 
+  // Files Table
+  console.log("\nCreating files table...");
+  await sql.unsafe(`
+    CREATE TABLE IF NOT EXISTS files (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      file_name TEXT NOT NULL,
+      file_type TEXT,
+      file_size INT,
+      file_path TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("  [OK] files");
+
   await sql.end();
 }
 
