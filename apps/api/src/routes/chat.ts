@@ -8,16 +8,31 @@ export const chatRouter = new Hono();
 chatRouter.use(authMiddleware);
 
 // GET /chat — list messages for the current user's companies
+// GET /chat — list messages for the current user's companies
 chatRouter.get("/chat", async (c) => {
   const user: UserPayload = c.get("user");
-  const roomId = c.req.query("roomId") || null; // Optional: filter by a specific "agent" or chat room
-  const limit = parseInt(c.req.query("limit") || "100");
+  const targetAgentId = c.req.query("agentId") || null; // Filter by DM
+  const limit = parseInt(c.req.query("limit") || "50");
+
+  const baseWhere = targetAgentId
+    ? sql`(
+        (${companyMembers.userId} = ${user.userId}) 
+        AND (${chatMessages.companyId} = ${companyMembers.companyId})
+        AND (${chatMessages.agentId} = ${targetAgentId} OR ${chatMessages.agentId} IS NULL)
+      )`
+    : sql`(
+        (${companyMembers.userId} = ${user.userId}) 
+        AND (${chatMessages.companyId} = ${companyMembers.companyId})
+        AND (${chatMessages.agentId} IS NULL)
+      )`;
 
   const rows = await db
     .select({
       id: chatMessages.id,
       content: chatMessages.content,
       role: chatMessages.role,
+      agentId: chatMessages.agentId,
+      userId: chatMessages.userId,
       createdAt: chatMessages.createdAt,
       agentName: agents.name,
       userEmail: sql<string>`users.email`,
@@ -25,13 +40,12 @@ chatRouter.get("/chat", async (c) => {
     .from(chatMessages)
     .leftJoin(agents, sql`${chatMessages.agentId} = ${agents.id}`)
     .leftJoin(companies, sql`${chatMessages.companyId} = ${companies.id}`)
-    .innerJoin(companyMembers, sql`${companyMembers.companyId} = ${companies.id}`)
-    .leftJoin(sql`users`, sql`${chatMessages.userId} = users.id`)
-    .where(sql`${companyMembers.userId} = ${user.userId}`)
+    .innerJoin(companyMembers, baseWhere)
+    .leftJoin(sql`users`, sql`${chatMessages.userId} = ${sql`users`}.id`)
     .orderBy(chatMessages.createdAt)
     .limit(limit);
 
-  return c.json({ messages: rows });
+  return c.json({ messages: rows, targetAgentId });
 });
 
 // POST /chat — send a message
@@ -51,12 +65,16 @@ chatRouter.post("/chat", async (c) => {
   
   if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
 
+  // If agentId is provided, we route it as a DM.
+  // If 'agentId' is 'ALL', we leave it null for a broadcast message.
+  const targetAgentId = body.agentId === "ALL" ? null : (body.agentId || null);
+
   const msg = await db.insert(chatMessages).values({
     companyId: body.companyId,
-    agentId: body.agentId || null,
+    agentId: targetAgentId,
     userId: user.userId,
     content: body.content,
-    role: body.role || "user",
+    role: "user",
   }).returning();
 
   return c.json({ message: msg[0] });

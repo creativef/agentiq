@@ -1,33 +1,57 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "../contexts/AuthContext";
 
+interface Agent {
+  id: string;
+  name: string;
+  role: string;
+}
+
 interface Message {
   id: string;
   content: string;
   role: string;
+  agentId: string | null;
+  userId: string | null;
+  createdAt: string;
   agentName: string | null;
   userEmail: string | null;
-  createdAt: string;
 }
 
 export default function ChatJournal() {
   const { company } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null); // null = Team
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  const fetchMessages = useCallback(() => {
+  // Fetch Agents for the "Compose To" dropdown
+  useEffect(() => {
     if (!company) return;
-    fetch("/api/chat", { credentials: "include" })
+    fetch(`/api/companies/${company.id}/agents`, { credentials: "include" })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setMessages(d?.messages || []))
+      .then(d => setAgents(d?.agents || []))
       .catch(console.error);
   }, [company]);
 
-  useEffect(() => { fetchMessages(); }, [company, fetchMessages]);
+  // Fetch Messages
+  const fetchMessages = useCallback(() => {
+    if (!company) return;
+    const url = selectedAgentId
+      ? `/api/chat?agentId=${selectedAgentId}`
+      : `/api/chat`; // "ALL" or Team view
+    
+    fetch(url, { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setMessages(d?.messages || []))
+      .catch(console.error);
+  }, [company, selectedAgentId]);
 
-  // Auto-scroll to bottom on new messages
+  useEffect(() => { fetchMessages(); }, [fetchMessages]);
+
+  // Auto-scroll
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
@@ -38,6 +62,9 @@ export default function ChatJournal() {
     
     setSending(true);
     try {
+      // selectedAgentId = 'ALL' means Team Chat, otherwise specific agent ID
+      const agentIdToSend = selectedAgentId === "ALL" ? null : selectedAgentId;
+      
       await fetch("/api/chat", {
         method: "POST",
         credentials: "include",
@@ -45,7 +72,7 @@ export default function ChatJournal() {
         body: JSON.stringify({
           companyId: company.id,
           content: input.trim(),
-          role: "user",
+          agentId: agentIdToSend, // If null, it's a broadcast message
         }),
       });
       setInput("");
@@ -57,60 +84,80 @@ export default function ChatJournal() {
     }
   };
 
+  // Determine current chat context
+  const chatLabel = selectedAgentId === "ALL" || !selectedAgentId
+    ? "🏢 Whole Team"
+    : agents.find(a => a.id === selectedAgentId)?.name || "Direct Message";
+
+  const roleIcon = (msg: Message) => {
+    if (msg.role === "user") return "👤 You";
+    return msg.agentName ? `🤖 ${msg.agentName}` : "System";
+  };
+
   return (
     <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", height: "calc(100vh - 80px)" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", marginBottom: "1rem" }}>Team Chat</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+        <h1 style={{ fontSize: "1.5rem", fontWeight: "bold" }}>Chat</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <span style={{ fontSize: "0.8rem", color: "#9ca3af" }}>Compose to:</span>
+          <select
+            value={selectedAgentId || "ALL"}
+            onChange={e => setSelectedAgentId(e.target.value === "ALL" ? null : e.target.value)}
+            style={{
+              background: "#1f2937",
+              border: "1px solid #374151",
+              borderRadius: "6px",
+              color: "white",
+              padding: "6px 12px",
+              fontSize: "0.85rem",
+            }}
+          >
+            <option value="ALL">🏢 Whole Team</option>
+            {agents.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.role === "FOUNDER" ? "🚀 " : a.role === "CEO" ? "👔 " : ""}{a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {/* Messages Area */}
       <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem", background: "#1f2937", borderRadius: "8px", padding: "1rem" }}>
         {messages.length === 0 ? (
           <div style={{ textAlign: "center", color: "#6b7280", padding: "2rem" }}>
-            No messages yet. Start a conversation!
+            No messages yet in {chatLabel}.
           </div>
         ) : (
-          messages.map(msg => {
-            const isUser = msg.role === "user";
-            const sender = isUser 
-              ? (msg.userEmail || "You") 
-              : (msg.agentName || "System");
-            
-            return (
+          messages.map(msg => (
+            <div
+              key={msg.id}
+              style={{
+                alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                maxWidth: "80%",
+              }}
+            >
+              <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "2px", marginLeft: msg.role === "user" ? "8px" : "0" }}>
+                {roleIcon(msg)}
+                <span style={{ marginLeft: "8px" }}>{new Date(msg.createdAt).toLocaleTimeString()}</span>
+              </div>
               <div
-                key={msg.id}
                 style={{
-                  alignSelf: isUser ? "flex-end" : "flex-start",
-                  maxWidth: "80%",
-                  display: "flex",
-                  alignItems: "flex-end",
-                  flexDirection: "column",
+                  background: msg.role === "user" ? "#3b82f6" : "#374151",
+                  color: "white",
+                  padding: "0.75rem 1rem",
+                  borderRadius: "12px",
+                  borderBottomRightRadius: msg.role === "user" ? "4px" : "12px",
+                  borderBottomLeftRadius: msg.role === "user" ? "12px" : "4px",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  lineHeight: "1.4",
                 }}
               >
-                <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "4px", marginRight: isUser ? "4px" : "0" }}>
-                  {!isUser && <span>🤖 {sender}</span>}
-                  {isUser && <span>{sender}</span>}
-                  <span style={{ marginLeft: "8px", opacity: 0.5 }}>
-                    {new Date(msg.createdAt).toLocaleTimeString()}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    background: isUser ? "#3b82f6" : "#374151",
-                    color: "white",
-                    padding: "0.75rem 1rem",
-                    borderRadius: "12px",
-                    borderBottomRightRadius: isUser ? "4px" : "12px",
-                    borderBottomLeftRadius: isUser ? "12px" : "4px",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    lineHeight: "1.4",
-                    fontSize: "0.9rem",
-                  }}
-                >
-                  {msg.content}
-                </div>
+                {msg.content}
               </div>
-            );
-          })
+            </div>
+          ))
         )}
         <div ref={endRef} />
       </div>
@@ -121,7 +168,7 @@ export default function ChatJournal() {
           autoFocus
           value={input}
           onChange={e => setInput(e.target.value)}
-          placeholder="Type a message..."
+          placeholder={`Message ${chatLabel}...`}
           disabled={sending || !company}
           style={{
             flex: 1,
@@ -144,7 +191,6 @@ export default function ChatJournal() {
             borderRadius: "8px",
             cursor: sending ? "wait" : "pointer",
             fontWeight: "bold",
-            fontSize: "0.95rem",
           }}
         >
           {sending ? "..." : "Send"}
