@@ -333,10 +333,10 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
   const task = taskCheck[0];
 
   // 1. Find assigned agent
-  let assignedAgent = null;
+  let assignedAgentData = null;
   if (task.agentId) {
     const ag = await db.select().from(agents).where(sql`${agents.id} = ${task.agentId}`).limit(1);
-    if (ag.length > 0) assignedAgent = ag[0];
+    if (ag.length > 0) assignedAgentData = ag[0];
   }
 
   // 2. Fetch agent skills
@@ -351,22 +351,42 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
   }
 
   // 3. Find project and company
-  const projCheck = await db.select({ companyId: projects.companyId })
+  const projCheck = await db.select({ companyId: projects.companyId, id: projects.id })
     .from(projects)
     .where(sql`${projects.id} = ${task.projectId}`)
     .limit(1);
 
-  if (projCheck.length === 0) {
-    return c.json({ success: false, result: "❌ Error: Task's project is invalid or deleted." }, 500);
+  // Safety Fallback: If task has no project, find the first company associated with the user
+  let companyId: string;
+  let projectId: string;
+
+  if (projCheck.length > 0) {
+    companyId = projCheck[0].companyId;
+    projectId = projCheck[0].id || projCheck[0].companyId; // Fallback to companyId if task has no project
+  } else {
+    // Find the user's company as a fallback
+    const companyCheck = await db.select({ companyId: companyMembers.companyId })
+      .from(companyMembers)
+      .where(sql`${companyMembers.userId} = ${task.assignedBy}`)
+      .limit(1);
+
+    if (companyCheck.length === 0) {
+      return c.json({ success: false, result: "❌ Error: No company found for this task." }, 500);
+    }
+    
+    companyId = companyCheck[0].companyId;
+    projectId = companyCheck[0].companyId; // Use companyId as fallback projectId
   }
+
+  const assignedAgent = assignedAgentData || null;
 
   const execContext: ExecutionContext = {
     taskId,
     taskTitle: task.title,
     taskDescription: task.description || "",
     assignedAgent: assignedAgent || { id: "", name: "System", role: "SYSTEM" },
-    companyId: projCheck[0].companyId,
-    projectId: task.projectId || projCheck[0].companyId, // Fallback if task has no project
+    companyId,
+    projectId,
     agentSkills: agentSkillList,
   };
 

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 
 interface Task {
@@ -42,6 +43,7 @@ const statusLabels: Record<string, string> = {
 
 export default function TaskHistory() {
   const { company, project } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all"); // all, completed, failed, pending
@@ -56,6 +58,24 @@ export default function TaskHistory() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [company, project]);
+
+  const handleReRun = useCallback(async (taskId: string) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/execute`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (res.ok) {
+        // Refresh the task list to show updated result
+        const data = await res.json();
+        await fetch(`/api/tasks${project ? `?projectId=${project.id}` : ""}`, { credentials: "include" })
+          .then(r => r.json())
+          .then(d => setTasks(d.tasks || []));
+      }
+    } catch (e) {
+      console.error("Re-run failed:", e);
+    }
+  }, [project]);
 
   const filteredTasks = useMemo(() => {
     let result = [...tasks];
@@ -234,21 +254,28 @@ export default function TaskHistory() {
                             </div>
                           )}
                           {task.approvalStatus && (
-                            <div style={{ fontSize: "0.75rem", color: task.approvalStatus === "approved" ? "#22c55e" : task.approvalStatus === "rejected" ? "#ef4444" : "#f59e0b", marginBottom: "0.5rem" }}>
+                            <div style={{ fontSize: "0.75rem", color: task.approvalStatus === "approved" ? "#22c55e" : task.approvalStatus === "rejected" ? "#ef4444" : "#f59e0b" }}>
                               Approval: {task.approvalStatus} {task.approverRole ? `(by ${task.approverRole})` : ""}
                             </div>
                           )}
-                          {/* Re-run button for old tasks */}
                           {(task.status === "done" || task.execStatus === "completed") && (
-                            <div style={{ marginTop: "0.5rem" }}>
-                              <span style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "4px", display: "block" }}>Want to re-run this task with the new engine?</span>
-                              <a
-                                href={`/tasks`}
-                                style={{ fontSize: "0.8rem", color: "#a855f7", textDecoration: "none", cursor: "pointer" }}
-                              >
-                                ⚡ Go to Task Board to Re-run
-                              </a>
-                            </div>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleReRun(task.id); }}
+                              style={{ 
+                                marginTop: "0.5rem", 
+                                padding: "0.75rem 2rem", 
+                                background: "#a855f7", 
+                                border: "none", 
+                                color: "white", 
+                                borderRadius: "6px", 
+                                fontWeight: "bold",
+                                cursor: "pointer", 
+                                width: "100%", 
+                                fontSize: "0.9rem" 
+                              }}
+                            >
+                              ⚡ Re-Execute (Upgrade Report)
+                            </button>
                           )}
                         </div>
                       )}
