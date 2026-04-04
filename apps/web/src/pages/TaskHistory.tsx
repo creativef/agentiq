@@ -183,64 +183,76 @@ export default function TaskHistory() {
                 const statusLabel = statusLabels[task.status] || statusLabels[task.execStatus] || task.status;
                 
                 return (
-                  <div
-                    key={task.id}
-                    style={{
-                      background: "#1f2937",
-                      borderRadius: "8px",
-                      border: `1px solid #374151`,
-                      borderLeft: `4px solid ${statusColor}`,
-                      overflow: "hidden",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => setExpandedTask(isExpanded ? null : task.id)}
-                  >
-                    <div style={{ padding: "0.75rem 1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: "bold", fontSize: "0.95rem", marginBottom: "2px" }}>{task.title}</div>
-                        <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
-                          {new Date(task.createdAt).toLocaleDateString()} at {new Date(task.createdAt).toLocaleTimeString()}
+                    <div key={task.id}
+                      style={{
+                        background: "#1f2937",
+                        borderRadius: "8px",
+                        border: `1px solid #374151`,
+                        borderLeft: `4px solid ${statusColor}`,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div style={{ padding: "0.75rem 1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: "bold", fontSize: "0.95rem", marginBottom: "2px" }}>{task.title}</div>
+                          <div style={{ fontSize: "0.75rem", color: "#6b7280" }}>
+                            {new Date(task.createdAt).toLocaleDateString()} at {new Date(task.createdAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <span style={{
+                            padding: "2px 8px",
+                            background: `${statusColor}22`,
+                            color: statusColor,
+                            borderRadius: "4px",
+                            fontSize: "0.7rem",
+                            fontWeight: "bold",
+                          }}>
+                            {statusLabel}
+                          </span>
+                          <button
+                            onClick={e => { e.stopPropagation(); setExpandedTask(isExpanded ? null : task.id); }}
+                            style={{ background: "none", border: "none", color: "#6b7280", cursor: "pointer", fontSize: "0.8rem", padding: "4px" }}
+                          >{isExpanded ? "▲" : "▼"}</button>
                         </div>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <span style={{
-                          padding: "2px 8px",
-                          background: `${statusColor}22`,
-                          color: statusColor,
-                          borderRadius: "4px",
-                          fontSize: "0.7rem",
-                          fontWeight: "bold",
-                        }}>
-                          {statusLabel}
-                        </span>
-                        <span style={{ fontSize: "0.7rem", color: "#6b7280" }}>{isExpanded ? "▲" : "▼"}</span>
-                      </div>
-                    </div>
 
-                    {isExpanded && (
-                      <div style={{ padding: "0 1rem 0.75rem", borderTop: "1px solid #374151", marginTop: "0.5rem", paddingTop: "0.75rem" }}>
-                        {task.description && (
-                          <div style={{ marginBottom: "0.5rem" }}>
-                            <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "2px" }}>Description:</div>
-                            <div style={{ fontSize: "0.85rem", color: "#e5e7eb" }}>{task.description}</div>
-                          </div>
-                        )}
-                        {task.result && (
-                          <div style={{ marginBottom: "0.5rem" }}>
-                            <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "2px" }}>Result:</div>
-                            <div style={{ fontSize: "0.85rem", color: "#a3e635", background: "#052e16", padding: "0.5rem", borderRadius: "4px", whiteSpace: "pre-wrap" }}>
-                              {task.result}
+                      {isExpanded && (
+                        <div style={{ padding: "0 1rem 0.75rem", borderTop: "1px solid #374151", marginTop: "0.5rem", paddingTop: "0.75rem" }}>
+                          {task.description && (
+                            <div style={{ marginBottom: "0.5rem" }}>
+                              <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "2px" }}>Description:</div>
+                              <div style={{ fontSize: "0.85rem", color: "#e5e7eb" }}>{task.description}</div>
                             </div>
-                          </div>
-                        )}
-                        {task.approvalStatus && (
-                          <div style={{ fontSize: "0.75rem", color: task.approvalStatus === "approved" ? "#22c55e" : task.approvalStatus === "rejected" ? "#ef4444" : "#f59e0b" }}>
-                            Approval: {task.approvalStatus} {task.approverRole ? `(by ${task.approverRole})` : ""}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                          )}
+                          {task.result && (
+                            <div style={{ marginBottom: "0.5rem" }}>
+                              <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "2px" }}>Execution Report:</div>
+                              <div style={{ fontSize: "0.85rem", color: "#a3e635", background: "#052e16", padding: "0.75rem", borderRadius: "6px", whiteSpace: "pre-wrap", fontFamily: "JetBrains Mono, ui-monospace, monospace", maxHeight: "300px", overflow: "auto", lineHeight: "1.5" }}>
+                                {task.result}
+                              </div>
+                            </div>
+                          )}
+                          {task.approvalStatus && (
+                            <div style={{ fontSize: "0.75rem", color: task.approvalStatus === "approved" ? "#22c55e" : task.approvalStatus === "rejected" ? "#ef4444" : "#f59e0b", marginBottom: "0.5rem" }}>
+                              Approval: {task.approvalStatus} {task.approverRole ? `(by ${task.approverRole})` : ""}
+                            </div>
+                          )}
+                          {/* Re-run button for old tasks */}
+                          {(task.status === "done" || task.execStatus === "completed") && (
+                            <div style={{ marginTop: "0.5rem" }}>
+                              <span style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: "4px", display: "block" }}>Want to re-run this task with the new engine?</span>
+                              <a
+                                href={`/tasks`}
+                                style={{ fontSize: "0.8rem", color: "#a855f7", textDecoration: "none", cursor: "pointer" }}
+                              >
+                                ⚡ Go to Task Board to Re-run
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                 );
               })}
             </div>

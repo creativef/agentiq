@@ -241,6 +241,10 @@ export default function TaskBoard() {
                     {isReadyToRun && task.agentId && (
                        <button onClick={() => handleExecute(task.id)} style={{ flex: 1, fontSize: "0.7rem", padding: "4px", background: "#3b82f6", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>▶ Execute</button>
                     )}
+                    {/* Re-Generate Report for Old Tasks */}
+                    {task.status === "done" && (
+                       <button onClick={() => handleExecute(task.id)} style={{ flex: 1, fontSize: "0.7rem", padding: "4px", background: "#a855f7", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>⚡ Re-run</button>
+                    )}
                   </div>
                 </div>
               )})}
