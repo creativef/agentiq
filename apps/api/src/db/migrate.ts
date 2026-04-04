@@ -185,75 +185,120 @@
    185|    }
    186|  }
    187|
-   188|  console.log("\nAll tables ready!");
-   189|
-   190|  // Add indexes on foreign keys and common query columns
-   191|  console.log("\nCreating indexes...");
-   192|  const indexes = [
-   193|    ['idx_agents_company_id', 'CREATE INDEX IF NOT EXISTS idx_agents_company_id ON agents(company_id)'],
-   194|    ['idx_agents_platform', 'CREATE INDEX IF NOT EXISTS idx_agents_platform ON agents(company_id, platform)'],
-   195|    ['idx_tasks_project_id', 'CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)'],
-   196|    ['idx_tasks_status', 'CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(project_id, status)'],
-   197|    ['idx_events_company_id', 'CREATE INDEX IF NOT EXISTS idx_events_company_id ON events(company_id)'],
-   198|    ['idx_events_created', 'CREATE INDEX IF NOT EXISTS idx_events_created ON events(company_id, created_at DESC)'],
-   199|    ['idx_company_members_user', 'CREATE INDEX IF NOT EXISTS idx_company_members_user ON company_members(user_id)'],
-   200|    ['idx_projects_company_id', 'CREATE INDEX IF NOT EXISTS idx_projects_company_id ON projects(company_id)'],
-   201|    ['idx_connectors_company', 'CREATE INDEX IF NOT EXISTS idx_connectors_company ON connectors(company_id, platform)'],
-   202|    ['idx_goals_company_id', 'CREATE INDEX IF NOT EXISTS idx_goals_company_id ON goals(company_id)'],
-   203|  ];
-   204|
-   205|  for (const [name, stmt] of indexes) {
-   206|    try {
-   207|      await sql.unsafe(stmt);
-   208|      console.log(`  [OK] ${name}`);
-   209|    } catch (e: any) {
-   210|      console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
-   211|    }
-   212|  console.log("\nSeeding skill templates...");
-   213|  const seedSkills = [
-   214|    { name: 'Code Generation', category: 'development', icon: '💻',
-   215|      description: 'Write, review, and debug code',
-   216|      instructions: 'You are a skilled software engineer. Write clean, tested, documented code. Follow best practices and design patterns. Prefer simplicity over cleverness. Add comments explaining non-obvious logic.' },
-   217|    { name: 'Research & Analysis', category: 'analysis', icon: '🔍',
-   218|      description: 'Market research and data analysis',
-   219|      instructions: 'You are a research analyst. Gather data from reliable sources. Synthesize findings into clear, actionable insights. Always cite your sources. Flag uncertainty when data is incomplete.' },
-   220|  // Seed skill templates if none exist
-   221|  await db.select({ count: sql`count(*)` }).from(skills).then(rows => {
-   222|    const checkSkills = rows;
-   223|    return checkSkills;
-   224|  }).then(async (checkSkills) => {
-   225|    if (parseInt(checkSkills[0].count) > 0) return;
-   226|    console.log("\nSeeding skill templates...");
-   227|    const seedSkills = [
-   228|      { id: "strategic_planning", name: "Strategic Planning", category: "leadership", icon: "📊",
-   229|        description: "Business strategy and planning",
-   230|        instructions: "You are a strategic advisor. Think long-term. Identify risks and opportunities. Provide data-driven recommendations. Present clear, actionable plans with timelines." },
-   231|      { id: "project_management", name: "Project Management", category: "operations", icon: "📋",
-   232|        description: "Coordination and delivery",
-   233|        instructions: "You are a project manager. Break work into actionable tasks. Track dependencies. Communicate blockers early. Optimize for team velocity." },
-   234|      { id: "code_generation", name: "Code Generation", category: "development", icon: "💻",
-   235|        description: "Write, review, and debug code",
-   236|        instructions: "You are a skilled software developer. Write clean, tested, documented code. Follow best practices and design patterns. Prefer simplicity over cleverness." },
-   237|      { id: "research_analysis", name: "Research & Analysis", category: "analysis", icon: "🔍",
-   238|        description: "Market research and data analysis",
-   239|        instructions: "You are a research analyst. Gather data from reliable sources. Synthesize findings into clear, actionable insights. Always cite sources. Flag uncertainty." },
-   240|      { id: "content_writing", name: "Content Writing", category: "content", icon: "📝",
-   241|        description: "Blog posts, documentation, and copy",
-   242|        instructions: "You are a senior content writer. Write clear, engaging, audience-appropriate content. Use active voice. Edit ruthlessly. Match the brand voice and tone." },
-   243|    ];
-   244|
-   245|    for (const s of seedSkills) {
-   246|      try {
-   247|        await sql`INSERT INTO skills (id, name, category, description, instructions, icon) VALUES (${crypto.randomUUID()}, ${s.name}, ${s.category}, ${s.description}, ${s.instructions}, ${s.icon})`;
-   248|        console.log(`  [SEED] ${s.name}`);
-   249|      } catch (e: any) {
-   250|        console.log(`  [SKIP seed] ${s.name}: ${e.message.split('\n')[0]}`);
-   251|      }
-   252|    }
-   253|  });
-   254|
-   255|  await sql.end();
-   256|}
-   257|
-   258|main().catch(console.error);
+  console.log("\nAll tables ready!");
+
+  // Add indexes on foreign keys and common query columns
+  console.log("\nCreating indexes...");
+  const indexes = [
+    ['idx_agents_company_id', 'CREATE INDEX IF NOT EXISTS idx_agents_company_id ON agents(company_id)'],
+    ['idx_agents_platform', 'CREATE INDEX IF NOT EXISTS idx_agents_platform ON agents(company_id, platform)'],
+    ['idx_tasks_project_id', 'CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id)'],
+    ['idx_tasks_status', 'CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(project_id, status)'],
+    ['idx_events_company_id', 'CREATE INDEX IF NOT EXISTS idx_events_company_id ON events(company_id)'],
+    ['idx_events_created', 'CREATE INDEX IF NOT EXISTS idx_events_created ON events(company_id, created_at DESC)'],
+    ['idx_company_members_user', 'CREATE INDEX IF NOT EXISTS idx_company_members_user ON company_members(user_id)'],
+    ['idx_projects_company_id', 'CREATE INDEX IF NOT EXISTS idx_projects_company_id ON projects(company_id)'],
+    ['idx_connectors_company', 'CREATE INDEX IF NOT EXISTS idx_connectors_company ON connectors(company_id, platform)'],
+    ['idx_goals_company_id', 'CREATE INDEX IF NOT EXISTS idx_goals_company_id ON goals(company_id)'],
+  ];
+
+  for (const [name, stmt] of indexes) {
+    try {
+      await sql.unsafe(stmt);
+      console.log(`  [OK] ${name}`);
+    } catch (e: any) {
+      console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  // Create skill tables
+  console.log("\nCreating skill tables...");
+  try {
+    await sql.unsafe(`
+      CREATE TABLE IF NOT EXISTS skills (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        description TEXT,
+        instructions TEXT NOT NULL,
+        icon TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log("  [OK] skills");
+  } catch (e: any) {
+    console.log(`  [SKIP] skills: ${e.message.split('\n')[0]}`);
+  }
+
+  try {
+    await sql.unsafe(`
+      CREATE TABLE IF NOT EXISTS agent_skills (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+        custom_instructions TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(agent_id, skill_id)
+      )
+    `);
+    console.log("  [OK] agent_skills");
+  } catch (e: any) {
+    console.log(`  [SKIP] agent_skills: ${e.message.split('\n')[0]}`);
+  }
+
+  // Seed skill templates if none exist
+  const skillCount = await sql.unsafe("SELECT COUNT(*) as cnt FROM skills");
+  if (parseInt(skillCount[0].cnt) === 0) {
+    console.log("\nSeeding skill templates...");
+    const seedSkills = [
+      { name: "Strategic Planning", category: "leadership", icon: "📊",
+        description: "Business strategy and planning",
+        instructions: "You are a strategic advisor. Think long-term. Identify risks and opportunities. Provide data-driven recommendations. Present clear, actionable plans with timelines." },
+      { name: "Project Management", category: "operations", icon: "📋",
+        description: "Coordination and delivery",
+        instructions: "You are a project manager. Break work into actionable tasks. Track dependencies. Communicate blockers early. Optimize for team velocity." },
+      { name: "Code Generation", category: "development", icon: "💻",
+        description: "Write, review, and debug code",
+        instructions: "You are a skilled developer. Write clean, tested, documented code. Follow best practices. Prefer simplicity over cleverness." },
+      { name: "Research & Analysis", category: "analysis", icon: "🔍",
+        description: "Market research and data analysis",
+        instructions: "You are a research analyst. Gather data from reliable sources. Synthesize findings into clear, actionable insights. Always cite sources." },
+      { name: "Content Writing", category: "content", icon: "📝",
+        description: "Blog posts, documentation, and copy",
+        instructions: "You are a senior content writer. Write clear, engaging, audience-appropriate content. Use active voice. Edit ruthlessly." },
+    ];
+
+    for (const s of seedSkills) {
+      try {
+        await sql`INSERT INTO skills (id, name, category, description, instructions, icon) VALUES (${crypto.randomUUID()}, ${s.name}, ${s.category}, ${s.description}, ${s.instructions}, ${s.icon})`;
+        console.log(`  [SEED] ${s.name}`);
+      } catch (e: any) {
+        console.log(`  [SKIP seed] ${s.name}: ${e.message.split('\n')[0]}`);
+      }
+    }
+  } else {
+    console.log("\nSkills already seeded, skipping.");
+  }
+
+  // Skill indexes
+  console.log("\nCreating skill indexes...");
+  const skillIndexes = [
+    ['idx_agent_skills_agent_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_agent_id ON agent_skills(agent_id)'],
+    ['idx_agent_skills_skill_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_skill_id ON agent_skills(skill_id)'],
+    ['idx_skills_category', 'CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category)'],
+  ];
+
+  for (const [name, stmt] of skillIndexes) {
+    try {
+      await sql.unsafe(stmt);
+      console.log(`  [OK] ${name}`);
+    } catch (e: any) {
+      console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  await sql.end();
+}
+
+main().catch(console.error);
    259|
