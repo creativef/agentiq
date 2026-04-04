@@ -53,10 +53,17 @@ export const tasks = pgTable("tasks", {
   agentId: uuid("agent_id").references(() => agents.id),
   title: text("title").notNull(),
   description: text("description"),
-  status: text("status").notNull().default("todo"),
+  status: text("status").notNull().default("todo"), // todo -> in_progress -> done
   priority: text("priority").default("medium"),
   createdAt: timestamp("created_at").defaultNow(),
   dueDate: timestamp("due_date"),
+  // Execution Engine Fields
+  execStatus: text("exec_status").default("idle"), // idle -> scheduled -> pending_approval -> executing -> completed -> failed
+  scheduledAt: timestamp("scheduled_at"),
+  approverRole: text("approver_role"), // e.g., "FOUNDER", "CEO"
+  approvalStatus: text("approval_status"), // null -> pending -> approved -> rejected
+  result: text("result"), // Agent's output/report
+  assignedBy: text("assigned_by"), // User ID of creator
 });
 
 export const events = pgTable("events", {

@@ -250,6 +250,26 @@ async function main() {
     console.log("\nSkills already seeded, skipping.");
   }
 
+
+  // Task Execution Engine Columns
+  console.log("\nAdding task execution columns (safe for existing tables)...");
+  const taskColumns = [
+    ['tasks', 'exec_status', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS exec_status TEXT DEFAULT 'idle'"],
+    ['tasks', 'scheduled_at', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP"],
+    ['tasks', 'approver_role', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approver_role TEXT"],
+    ['tasks', 'approval_status', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approval_status TEXT"],
+    ['tasks', 'result', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS result TEXT"],
+  ];
+
+  for (const [tbl, col, stmt] of taskColumns) {
+    try {
+      await sql.unsafe(stmt);
+      console.log(`  [OK] ${tbl}.${col}`);
+    } catch (e: any) {
+      console.log(`  [SKIP] ${tbl}.${col}: ${e.message.split('\n')[0]}`);
+    }
+  }
+
   await sql.end();
 }
 

@@ -10,6 +10,10 @@ interface Task {
   agentName: string | null;
   agentId: string | null;
   projectId: string | null;
+  execStatus: string;
+  approvalStatus: string | null;
+  approverRole: string | null;
+  result: string | null;
 }
 
 interface Agent {
@@ -40,7 +44,15 @@ export default function TaskBoard() {
   const [showForm, setShowForm] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const dragItem = useRef<string | null>(null);
-  const [form, setForm] = useState({ title: "", description: "", priority: "medium", agentId: "" });
+  const [form, setForm] = useState({ 
+    title: "", 
+    description: "", 
+    priority: "medium", 
+    agentId: "",
+    scheduledAt: "",
+    requiresApproval: false,
+    approverRole: "FOUNDER",
+  });
 
   // Load agents for assignment dropdown
   useEffect(() => {
@@ -52,9 +64,7 @@ export default function TaskBoard() {
   }, [company]);
 
   useEffect(() => {
-    const url = project
-      ? `/api/tasks?projectId=${project.id}`
-      : "/api/tasks";
+    const url = project ? `/api/tasks?projectId=${project.id}` : "/api/tasks";
     fetch(url, { credentials: "include" })
       .then(r => r.json())
       .catch(console.error)
@@ -71,15 +81,10 @@ export default function TaskBoard() {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
   }, []);
 
-  const handleDelete = useCallback(async (taskId: string) => {
-    await fetch(`/api/tasks/${taskId}`, { method: "DELETE", credentials: "include" });
-    setTasks(prev => prev.filter(t => t.id !== taskId));
-  }, []);
-
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!company || !project) return;
-    
+
     const res = await fetch("/api/tasks", {
       method: "POST",
       credentials: "include",
@@ -88,17 +93,41 @@ export default function TaskBoard() {
         title: form.title,
         description: form.description || null,
         priority: form.priority,
-        status: "backlog",
         agentId: form.agentId || null,
         projectId: project.id,
+        scheduledAt: form.scheduledAt || null,
+        requiresApproval: form.requiresApproval,
+        approverRole: form.requiresApproval ? form.approverRole : null,
       }),
     });
     if (res.ok) {
       const data = await res.json();
       setTasks(prev => [...prev, { ...data.task }]);
       setShowForm(false);
-      setForm({ title: "", description: "", priority: "medium", agentId: "" });
+      setForm({ title: "", description: "", priority: "medium", agentId: "", scheduledAt: "", requiresApproval: false, approverRole: "FOUNDER" });
     }
+  };
+
+  const handleExecute = async (taskId: string) => {
+    const res = await fetch(`/api/tasks/${taskId}/execute`, { method: "POST", credentials: "include" });
+    if (res.ok) {
+      const data = await res.json();
+      const update = { 
+        status: data.success ? "done" : "blocked",
+        result: data.result,
+        execStatus: data.success ? "completed" : "failed" 
+      };
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...update } : t));
+    }
+  };
+
+  const handleApprove = async (taskId: string, approve: boolean) => {
+    const endpoint = approve ? "approve" : "reject";
+    await fetch(`/api/tasks/${taskId}/${endpoint}`, { method: "POST", credentials: "include" });
+    // Refresh handled by parent or optimistic update
+    fetch(project ? `/api/tasks?projectId=${project.id}` : "/api/tasks", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setTasks(d.tasks || []));
   };
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -131,17 +160,31 @@ export default function TaskBoard() {
 
       {showForm && (
         <form onSubmit={handleCreate} style={{ background: "#1f2937", padding: "1rem", borderRadius: "8px", border: "1px solid #374151", marginBottom: "1rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "0.5rem" }}>
             <input autoFocus required placeholder="Task title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
             <select value={form.agentId} onChange={e => setForm({...form, agentId: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
-              <option value="">— No Agent —</option>
+              <option value="">— No Agent Assigned —</option>
               {agents.map(a => <option key={a.id} value={a.id}>{a.role === "FOUNDER" ? "🚀 " : a.role === "CEO" ? "👔 " : ""}{a.name}</option>)}
             </select>
             <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="low">Low Priority</option>
+              <option value="medium">Medium Priority</option>
+              <option value="high">High Priority</option>
             </select>
+            <div>
+              <label style={{ fontSize: "0.8rem", color: "#9ca3af", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <input type="checkbox" checked={form.requiresApproval} onChange={e => setForm({...form, requiresApproval: e.target.checked})} /> Requires Approval
+              </label>
+            </div>
+            {form.requiresApproval && (
+              <select value={form.approverRole} onChange={e => setForm({...form, approverRole: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
+                <option value="FOUNDER">Founder</option>
+                <option value="CEO">CEO</option>
+              </select>
+            )}
+            {form.scheduledAt && (
+               <input type="datetime-local" value={form.scheduledAt} onChange={e => setForm({...form, scheduledAt: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
+            )}
           </div>
           <textarea placeholder="Description (optional)" value={form.description} onChange={e => setForm({...form, description: e.target.value})} style={{ width: "100%", marginTop: "0.5rem", padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", minHeight: "60px", boxSizing: "border-box" }} />
           <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
@@ -160,17 +203,44 @@ export default function TaskBoard() {
                 <span style={{ fontWeight: "bold", fontSize: "0.9rem" }}>{col.label}</span>
                 <span style={{ background: col.color, color: "#000", fontSize: "0.75rem", fontWeight: "bold", padding: "2px 8px", borderRadius: "12px" }}>{colTasks.length}</span>
               </div>
-              {colTasks.map(task => (
-                <div key={task.id} draggable onDragStart={e => handleDragStart(e, task.id)} style={{ background: "#1f2937", padding: "0.75rem", borderRadius: "6px", marginBottom: "0.75rem", border: "1px solid #374151", cursor: "grab", opacity: draggedId === task.id ? 0.5 : 1 }}>
+              {colTasks.map(task => {
+                // Determine extra badges
+                const isPendingApproval = task.approvalStatus === "pending";
+                const isExecuting = task.execStatus === "executing";
+                const isReadyToRun = task.execStatus === "ready" || (task.execStatus === "completed" && task.status !== "done");
+                
+                return (
+                <div key={task.id} draggable onDragStart={e => handleDragStart(e, task.id)} style={{ background: "#1f2937", padding: "0.75rem", borderRadius: "6px", marginBottom: "0.75rem", border: isPendingApproval ? "2px dashed #f59e0b" : "1px solid #374151", cursor: "grab", opacity: draggedId === task.id ? 0.5 : 1, maxWidth: "280px" }}>
                   <div style={{ fontWeight: "bold", fontSize: "0.9rem", marginBottom: "4px" }}>{task.title}</div>
-                  {task.description && <div style={{ fontSize: "0.75rem", color: "#9ca3af", marginBottom: "4px" }}>{task.description}</div>}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  {isPendingApproval && <div style={{ fontSize: "0.7rem", color: "#f59e0b", marginBottom: "2px" }}>⏳ Pending {task.approverRole} approval</div>}
+                  {isExecuting && <div style={{ fontSize: "0.7rem", color: "#3b82f6", marginBottom: "2px" }}>⚙️ Executing...</div>}
+                  
+                  {task.result && (
+                     <div style={{ fontSize: "0.7rem", color: "#a3e635", marginTop: "4px", padding: "4px", background: "#052e16", borderRadius: "4px", whiteSpace: "pre-wrap" }}>
+                       ✅ Result: {task.result}
+                     </div>
+                  )}
+
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
                     <span style={{ fontSize: "0.7rem", padding: "2px 6px", background: `${priorityColors[task.priority]}33`, color: priorityColors[task.priority] || "#6b7280", borderRadius: "4px" }}>{task.priority}</span>
                     {task.agentName && <span style={{ fontSize: "0.7rem", color: "#9ca3af" }}>{task.agentName}</span>}
                     <button onClick={e => { e.stopPropagation(); handleDelete(task.id); }} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: "0.75rem" }}>&times;</button>
                   </div>
+
+                  {/* Action Buttons */}
+                  <div style={{ display: "flex", gap: "4px", marginTop: "8px" }}>
+                    {isPendingApproval && (
+                      <>
+                        <button onClick={() => handleApprove(task.id, true)} style={{ flex: 1, fontSize: "0.7rem", padding: "4px", background: "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>Approve</button>
+                        <button onClick={() => handleApprove(task.id, false)} style={{ flex: 1, fontSize: "0.7rem", padding: "4px", background: "#ef4444", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>Reject</button>
+                      </>
+                    )}
+                    {isReadyToRun && task.agentId && (
+                       <button onClick={() => handleExecute(task.id)} style={{ flex: 1, fontSize: "0.7rem", padding: "4px", background: "#3b82f6", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>▶ Execute</button>
+                    )}
+                  </div>
                 </div>
-              ))}
+              )})}
             </div>
           );
         })}
