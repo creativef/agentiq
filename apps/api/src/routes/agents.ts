@@ -96,7 +96,21 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
     reportsTo: body.reportsTo || null,
   }).returning();
 
-  // Assign default skills based on role
+  // Assign skills if provided
+  if (body.skillIds && Array.isArray(body.skillIds) && body.skillIds.length > 0) {
+    for (const skillId of body.skillIds) {
+      try {
+        await db.insert(agentSkills).values({
+          agentId: result[0].id,
+          skillId,
+        });
+      } catch {
+        // Skip invalid skill IDs
+      }
+    }
+  }
+
+  return c.json({ agent: result[0] });
   const skillMap: Record<string, string> = {
     FOUNDER: "strategic_planning",
     CEO: "strategic_planning",

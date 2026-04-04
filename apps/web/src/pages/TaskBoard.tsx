@@ -8,7 +8,14 @@ interface Task {
   status: string;
   priority: string;
   agentName: string | null;
+  agentId: string | null;
   projectId: string | null;
+}
+
+interface Agent {
+  id: string;
+  name: string;
+  role: string;
 }
 
 const columns = [
@@ -28,11 +35,21 @@ const priorityColors: Record<string, string> = {
 export default function TaskBoard() {
   const { company, project } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const dragItem = useRef<string | null>(null);
-  const [form, setForm] = useState({ title: "", description: "", priority: "medium" });
+  const [form, setForm] = useState({ title: "", description: "", priority: "medium", agentId: "" });
+
+  // Load agents for assignment dropdown
+  useEffect(() => {
+    if (!company) return;
+    fetch(`/api/companies/${company.id}/agents`, { credentials: "include" })
+      .then(r => r.json())
+      .then(d => setAgents(d.agents || []))
+      .catch(console.error);
+  }, [company]);
 
   useEffect(() => {
     const url = project
@@ -65,13 +82,17 @@ export default function TaskBoard() {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, status: "backlog" }),
+      body: JSON.stringify({
+        ...form,
+        status: "backlog",
+        agentId: form.agentId || null,
+      }),
     });
     if (res.ok) {
       const data = await res.json();
-      setTasks(prev => [...prev, { ...data.task, agentName: null, projectId: null }]);
+      setTasks(prev => [...prev, { ...data.task }]);
       setShowForm(false);
-      setForm({ title: "", description: "", priority: "medium" });
+      setForm({ title: "", description: "", priority: "medium", agentId: "" });
     }
   };
 
@@ -107,6 +128,10 @@ export default function TaskBoard() {
         <form onSubmit={handleCreate} style={{ background: "#1f2937", padding: "1rem", borderRadius: "8px", border: "1px solid #374151", marginBottom: "1rem" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
             <input autoFocus required placeholder="Task title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
+            <select value={form.agentId} onChange={e => setForm({...form, agentId: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
+              <option value="">— No Agent —</option>
+              {agents.map(a => <option key={a.id} value={a.id}>{a.role === "FOUNDER" ? "🚀 " : a.role === "CEO" ? "👔 " : ""}{a.name}</option>)}
+            </select>
             <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value})} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
               <option value="low">Low</option>
               <option value="medium">Medium</option>

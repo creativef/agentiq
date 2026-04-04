@@ -118,16 +118,63 @@ export default function CompanySettings() {
               </div>
             )}
 
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <input value={inviteEmail} onChange={e => { setInviteEmail(e.target.value); setInviteError(null); }} placeholder="Email to invite" style={{ flex: 1, padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
-              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}>
-                <option value="CEO">CEO</option>
-                <option value="MANAGER">Manager</option>
-                <option value="AGENT">Agent</option>
-              </select>
-              <button onClick={handleInvite} disabled={inviteLoading} style={{ padding: "8px 16px", background: inviteLoading ? "#6b7280" : "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: inviteLoading ? "wait" : "pointer" }}>{inviteLoading ? "Adding..." : "Invite"}</button>
+            <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <div style={{ fontSize: "0.85rem", color: "#9ca3af" }}>Add a member</div>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  value={inviteEmail}
+                  onChange={e => { setInviteEmail(e.target.value); setInviteError(null); }}
+                  placeholder="Email address"
+                  style={{
+                    flex: "1 1 auto",
+                    padding: "10px 12px",
+                    background: "#374151",
+                    border: "1px solid #4B5563",
+                    borderRadius: "6px",
+                    color: "white",
+                    fontSize: "0.9rem",
+                    minWidth: "180px",
+                  }}
+                />
+                <select
+                  value={inviteRole}
+                  onChange={e => setInviteRole(e.target.value)}
+                  style={{
+                    padding: "10px 12px",
+                    background: "#374151",
+                    border: "1px solid #4B5563",
+                    borderRadius: "6px",
+                    color: "white",
+                    fontSize: "0.9rem",
+                    width: "120px",
+                  }}
+                >
+                  <option value="CEO">CEO</option>
+                  <option value="MANAGER">Manager</option>
+                  <option value="AGENT">Agent</option>
+                </select>
+                <button
+                  onClick={handleInvite}
+                  disabled={inviteLoading}
+                  style={{
+                    padding: "10px 20px",
+                    background: inviteLoading ? "#6b7280" : "#22c55e",
+                    border: "none",
+                    color: "white",
+                    borderRadius: "6px",
+                    cursor: inviteLoading ? "wait" : "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {inviteLoading ? "Adding..." : "Invite"}
+                </button>
+              </div>
+              {inviteError && (
+                <div style={{ marginTop: "0.5rem", padding: "10px 12px", background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: "6px", color: "#fca5a5", fontSize: "0.85rem" }}>
+                  {inviteError}
+                </div>
+              )}
             </div>
-            {inviteError && <div style={{ marginTop: "0.5rem", padding: "6px 10px", background: "#450a0a", borderRadius: "4px", color: "#fca5a5", fontSize: "0.8rem" }}>{inviteError}</div>}
           </div>
         </div>
       )}
