@@ -1,108 +1,153 @@
-import { useState, useEffect, FormEvent } from "react";
-
-type Tab = "chat" | "journal";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useAuth } from "../contexts/AuthContext";
 
 interface Message {
   id: string;
+  content: string;
   role: string;
-  content: string;
-  createdAt: string;
-}
-
-interface JournalEntry {
-  id: string;
-  content: string;
+  agentName: string | null;
+  userEmail: string | null;
   createdAt: string;
 }
 
 export default function ChatJournal() {
-  const [tab, setTab] = useState<Tab>("chat");
+  const { company } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
 
+  const fetchMessages = useCallback(() => {
+    if (!company) return;
+    fetch("/api/chat", { credentials: "include" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setMessages(d?.messages || []))
+      .catch(console.error);
+  }, [company]);
+
+  useEffect(() => { fetchMessages(); }, [company, fetchMessages]);
+
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
-    Promise.all([
-      fetch("/api/chat", { credentials: "include" }).then(r => r.ok ? r.json() : null),
-      fetch("/api/journal", { credentials: "include" }).then(r => r.ok ? r.json() : null),
-    ]).then(([chat, journal]) => {
-      setMessages(chat?.messages || []);
-      setJournalEntries(journal?.entries || []);
-      setLoading(false);
-    });
-  }, []);
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length]);
 
-  const handleSend = async (e: FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim()) return;
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: input }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setMessages([...messages, { id: data.id ?? Date.now().toString(), role: "user", content: input, createdAt: new Date().toISOString() }]);
+    if (!input.trim() || !company || sending) return;
+    
+    setSending(true);
+    try {
+      await fetch("/api/chat", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: company.id,
+          content: input.trim(),
+          role: "user",
+        }),
+      });
       setInput("");
+      fetchMessages();
+    } catch (e) {
+      console.error("Send failed:", e);
+    } finally {
+      setSending(false);
     }
   };
 
-  const handleJournal = async () => {
-    if (!input.trim()) return;
-    await fetch("/api/journal", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: input }),
-    });
-    setJournalEntries([{ id: Date.now().toString(), content: input, createdAt: new Date().toISOString() }, ...journalEntries]);
-    setInput("");
-  };
-
-  if (loading) return <div style={{ padding: "2rem", color: "#888" }}>Loading...</div>;
-
   return (
-    <div style={{ padding: "1.5rem", height: "calc(100vh - 80px)", display: "flex", flexDirection: "column" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", marginBottom: "1rem" }}>Chat & Journal</h1>
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
-        <button onClick={() => setTab("chat")} style={{ padding: "6px 16px", background: tab === "chat" ? "#3b82f6" : "#374151", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>Chat</button>
-        <button onClick={() => setTab("journal")} style={{ padding: "6px 16px", background: tab === "journal" ? "#3b82f6" : "#374151", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>Journal</button>
-      </div>
+    <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", height: "calc(100vh - 80px)" }}>
+      <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", marginBottom: "1rem" }}>Team Chat</h1>
 
-      <div style={{ flex: 1, overflow: "auto", background: "#111827", borderRadius: "8px", border: "1px solid #1f2937", marginBottom: "1rem", padding: "1rem" }}>
-        {tab === "chat" ? (
-          messages.length === 0 ? (
-            <div style={{ textAlign: "center", color: "#6b7280", padding: "2rem" }}>No messages yet. Start a conversation.</div>
-          ) : (
-            messages.map((msg, i) => (
-              <div key={i} style={{ marginBottom: "0.75rem", padding: "0.75rem", background: "#1f2937", borderRadius: "6px", maxWidth: msg.role === "user" ? "60%" : "100%", marginLeft: msg.role === "user" ? "auto" : "0" }}>
-                <div style={{ fontSize: "0.75rem", color: msg.role === "user" ? "#3b82f6" : "#22c55e", fontWeight: "bold", marginBottom: "4px" }}>
-                  {msg.role === "user" ? "You" : "Agent"}
-                </div>
-                <div style={{ fontSize: "0.9rem" }}>{msg.content}</div>
-              </div>
-            ))
-          )
+      {/* Messages Area */}
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem", background: "#1f2937", borderRadius: "8px", padding: "1rem" }}>
+        {messages.length === 0 ? (
+          <div style={{ textAlign: "center", color: "#6b7280", padding: "2rem" }}>
+            No messages yet. Start a conversation!
+          </div>
         ) : (
-          journalEntries.length === 0 ? (
-            <div style={{ textAlign: "center", color: "#6b7280", padding: "2rem" }}>No journal entries yet.</div>
-          ) : (
-            journalEntries.map(entry => (
-              <div key={entry.id} style={{ marginBottom: "0.75rem", padding: "0.75rem", background: "#1f2937", borderRadius: "6px", borderLeft: "4px solid #a855f7" }}>
-                <div style={{ fontSize: "0.75rem", color: "#9ca3af", marginBottom: "4px" }}>{new Date(entry.createdAt).toLocaleString()}</div>
-                <div style={{ fontSize: "0.9rem" }}>{entry.content}</div>
+          messages.map(msg => {
+            const isUser = msg.role === "user";
+            const sender = isUser 
+              ? (msg.userEmail || "You") 
+              : (msg.agentName || "System");
+            
+            return (
+              <div
+                key={msg.id}
+                style={{
+                  alignSelf: isUser ? "flex-end" : "flex-start",
+                  maxWidth: "80%",
+                  display: "flex",
+                  alignItems: "flex-end",
+                  flexDirection: "column",
+                }}
+              >
+                <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "4px", marginRight: isUser ? "4px" : "0" }}>
+                  {!isUser && <span>🤖 {sender}</span>}
+                  {isUser && <span>{sender}</span>}
+                  <span style={{ marginLeft: "8px", opacity: 0.5 }}>
+                    {new Date(msg.createdAt).toLocaleTimeString()}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    background: isUser ? "#3b82f6" : "#374151",
+                    color: "white",
+                    padding: "0.75rem 1rem",
+                    borderRadius: "12px",
+                    borderBottomRightRadius: isUser ? "4px" : "12px",
+                    borderBottomLeftRadius: isUser ? "12px" : "4px",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    lineHeight: "1.4",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {msg.content}
+                </div>
               </div>
-            ))
-          )
+            );
+          })
         )}
+        <div ref={endRef} />
       </div>
 
-      <form onSubmit={tab === "chat" ? handleSend : handleJournal} style={{ display: "flex", gap: "0.5rem" }}>
-        <input autoFocus value={input} onChange={e => setInput(e.target.value)} placeholder={tab === "chat" ? "Type a message..." : "Write a journal entry..."} style={{ flex: 1, padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }} />
-        <button type="submit" style={{ padding: "8px 16px", background: "#3b82f6", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>
-          {tab === "chat" ? "Send" : "Save"}
+      {/* Input Area */}
+      <form onSubmit={handleSend} style={{ display: "flex", gap: "0.5rem" }}>
+        <input
+          autoFocus
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="Type a message..."
+          disabled={sending || !company}
+          style={{
+            flex: 1,
+            padding: "0.75rem 1rem",
+            background: "#1f2937",
+            border: "1px solid #374151",
+            borderRadius: "8px",
+            color: "white",
+            fontSize: "0.95rem",
+          }}
+        />
+        <button
+          type="submit"
+          disabled={sending || !company || !input.trim()}
+          style={{
+            padding: "0.75rem 1.5rem",
+            background: "#3b82f6",
+            border: "none",
+            color: "white",
+            borderRadius: "8px",
+            cursor: sending ? "wait" : "pointer",
+            fontWeight: "bold",
+            fontSize: "0.95rem",
+          }}
+        >
+          {sending ? "..." : "Send"}
         </button>
       </form>
     </div>

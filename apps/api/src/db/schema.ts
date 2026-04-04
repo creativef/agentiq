@@ -145,3 +145,13 @@ export const agentLogs = pgTable("agent_logs", {
   message: text("message").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  agentId: uuid("agent_id").references(() => agents.id),
+  userId: uuid("user_id").references(() => users.id),
+  content: text("content").notNull(),
+  role: text("role").notNull().default("user"), // 'user', 'agent', 'system'
+  createdAt: timestamp("created_at").defaultNow(),
+});

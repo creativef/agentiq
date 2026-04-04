@@ -303,6 +303,21 @@ async function main() {
   `);
   console.log("  [OK] agent_logs");
 
+  // Chat Messages Table
+  console.log("\nCreating chat_messages table...");
+  await sql.unsafe(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      agent_id UUID REFERENCES agents(id) ON DELETE SET NULL,
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      content TEXT NOT NULL,
+      role TEXT DEFAULT 'user',
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("  [OK] chat_messages");
+
   await sql.end();
 }
 
