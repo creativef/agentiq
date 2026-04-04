@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { tasks, agents, projects, companyMembers, companies, goals, agentSkills, skills as skillsTable } from "../db/schema";
+import { tasks, agents, projects, companyMembers, companies, goals, agentSkills, skills as skillsTable, agentLogs } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
+import { logAgentActivity } from "../utils/agentLogger";
 
 // ============================================================
 // REAL EXECUTION ENGINE
@@ -97,7 +98,10 @@ async function executeTask(ctx: ExecutionContext): Promise<{ success: boolean; s
         .where(sql`${agents.companyId} = ${ctx.companyId} AND UPPER(${agents.role}) = ${role}`)
         .limit(1);
 
+      await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "info", `Searching for existing ${role} agent...`);
+
       if (existing.length > 0) {
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "info", `Found existing agent: ${existing[0].name}. Skipping duplication.`);
         steps.push({
           agent: ctx.assignedAgent.name,
           action: `Verified ${role} already exists`,
@@ -107,6 +111,8 @@ async function executeTask(ctx: ExecutionContext): Promise<{ success: boolean; s
       } else {
         // Create the agent
         const agentName = `${role.charAt(0) + role.slice(1).toLowerCase()}`;
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "action", `Creating new Agent record for ${role}: ${agentName}...`);
+
         const newAgent = await db.insert(agents).values({
           companyId: ctx.companyId,
           projectId: ctx.projectId,
@@ -116,6 +122,7 @@ async function executeTask(ctx: ExecutionContext): Promise<{ success: boolean; s
           createdAt: new Date(),
         }).returning();
 
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "success", `✅ Agent ${agentName} successfully created and onboarded.`);
         changes.push(`Created agent: ${agentName} (${role})`);
         steps.push({
           agent: ctx.assignedAgent.name,
@@ -132,11 +139,13 @@ async function executeTask(ctx: ExecutionContext): Promise<{ success: boolean; s
           CMO: ["Content Writing", "Research & Analysis"],
           MANAGER: ["Project Management"],
         };
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "action", `Assigning core skills to ${agentName}...`);
         const defaultSkillNames = roleSkills[role] || ["Research & Analysis"];
         const skillRows = await db.select().from(skillsTable).where(sql`${skillsTable.name} IN ${defaultSkillNames}`);
         for (const skill of skillRows) {
           await db.insert(agentSkills).values({ agentId: newAgent[0].id, skillId: skill.id });
         }
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "success", `Skills assigned: ${defaultSkillNames.join(", ")}`);
       }
     }
 
@@ -390,8 +399,11 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
     agentSkills: agentSkillList,
   };
 
-  // 4. Mark as executing
+    // 4. Mark as executing
   await db.update(tasks).set({ execStatus: "executing" }).where(sql`${tasks.id} = ${taskId}`);
+
+  // 5. Log start
+  await logAgentActivity(ctx.assignedAgent.id, taskId, "info", `🚀 Starting execution of task: "${ctx.taskTitle}"`);
 
   try {
     const result = await executeTask(execContext);

@@ -136,3 +136,12 @@ export const agentSkills = pgTable("agent_skills", {
   customInstructions: text("custom_instructions"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const agentLogs = pgTable("agent_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id").notNull().references(() => agents.id),
+  taskId: uuid("task_id").references(() => tasks.id),
+  level: text("level").default("info"), // info, action, success, error
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});

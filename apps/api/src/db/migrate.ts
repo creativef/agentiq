@@ -270,6 +270,21 @@ async function main() {
     }
   }
 
+  
+  // Agent Activity Log Table
+  console.log("\nCreating agent_logs table...");
+  await sql.unsafe(`
+    CREATE TABLE IF NOT EXISTS agent_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+      task_id UUID REFERENCES tasks(id) ON DELETE SET NULL,
+      level TEXT DEFAULT 'info',
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("  [OK] agent_logs");
+
   await sql.end();
 }
 

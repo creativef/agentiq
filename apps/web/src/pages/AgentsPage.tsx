@@ -1,5 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import ActivityLogView from "../components/ActivityLogView";
 
 interface AgentItem {
   id: string;
@@ -43,6 +44,7 @@ export default function AgentsPage() {
   const [agentSkills, setAgentSkills] = useState<Skill[]>([]);
   const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
   const [showSkillPicker, setShowSkillPicker] = useState(false);
+  const [showActivityLogAgent, setShowActivityLogAgent] = useState<string>("");
   const [showCreateSkill, setShowCreateSkill] = useState(false);
   const [newSkill, setNewSkill] = useState({ name: "", category: "development", instructions: "", description: "" });
 
@@ -402,6 +404,7 @@ export default function AgentsPage() {
                     <button onClick={() => handleStatus(a.id, "idle")} style={{ padding: "4px 10px", background: "#1e3a5f", border: "none", color: "#60a5fa", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Pause</button>
                     <button onClick={() => handleStatus(a.id, "sleeping")} style={{ padding: "4px 10px", background: "#374151", border: "none", color: "#9ca3af", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Sleep</button>
                     <button onClick={() => handleEdit(a)} style={{ padding: "4px 10px", background: "#374151", border: "none", color: "#e5e7eb", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Edit</button>
+                    <button onClick={() => setShowActivityLogAgent(a.id)} style={{ padding: "4px 10px", background: "#374151", border: "none", color: "#a855f7", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>📋 Activity</button>
                     <button onClick={() => handleDelete(a.id)} style={{ padding: "4px 10px", background: "#450a0a", border: "none", color: "#f87171", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem", marginLeft: "auto" }}>Delete</button>
                   </div>
                 </>
@@ -410,6 +413,12 @@ export default function AgentsPage() {
           ))}
         </div>
       )}
+
+      <ActivityLogView
+        agentId={showActivityLogAgent}
+        isOpen={!!showActivityLogAgent}
+        onClose={() => setShowActivityLogAgent("")}
+      />
     </div>
   );
 }
