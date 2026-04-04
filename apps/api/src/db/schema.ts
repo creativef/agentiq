@@ -96,6 +96,20 @@ export const journalEntries = pgTable("journal_entries", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const calendarEvents = pgTable("calendar_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  projectId: uuid("project_id").references(() => projects.id),
+  agentId: uuid("agent_id").references(() => agents.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time"),
+  allDay: boolean("all_day").default(false),
+  type: text("type").default("meeting"), // meeting, reminder, deadline
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Skill definitions — instruction sets that give agents capabilities
 export const skills = pgTable("skills", {
   id: uuid("id").primaryKey().defaultRandom(),

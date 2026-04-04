@@ -130,6 +130,21 @@ async function main() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `],
+    [`calendar_events`, `
+      CREATE TABLE IF NOT EXISTS calendar_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        project_id UUID REFERENCES projects(id),
+        agent_id UUID REFERENCES agents(id),
+        title TEXT NOT NULL,
+        description TEXT,
+        start_time TIMESTAMP NOT NULL,
+        end_time TIMESTAMP,
+        all_day BOOLEAN DEFAULT false,
+        type TEXT DEFAULT 'meeting',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
     [`skills`, `
       CREATE TABLE IF NOT EXISTS skills (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
