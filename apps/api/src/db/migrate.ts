@@ -271,6 +271,24 @@ async function main() {
   }
 
   
+  // Audit Log Table
+  console.log("\nCreating audit_log table...");
+  await sql.unsafe(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES users(id),
+      email TEXT,
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      status_code TEXT NOT NULL,
+      ip TEXT,
+      user_agent TEXT,
+      meta TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("  [OK] audit_log");
+
   // Agent Activity Log Table
   console.log("\nCreating agent_logs table...");
   await sql.unsafe(`

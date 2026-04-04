@@ -20,7 +20,7 @@ data.get("/companies", async (c) => {
 data.get("/events", async (c) => {
   const user: UserPayload = c.get("user");
   const rows = await db
-    .select({ id: events.id, type: events.type, payload: events.payload, createdAt: events.createdAt })
+    .select({ id: events.id, type: events.type, meta: events.meta, createdAt: events.createdAt })
     .from(events)
     .innerJoin(companyMembers, sql`${events.companyId} = ${companyMembers.companyId}`)
     .where(sql`${companyMembers.userId} = ${user.userId}`)

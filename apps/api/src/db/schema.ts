@@ -131,8 +131,8 @@ export const skills = pgTable("skills", {
 // Which skills each agent has
 export const agentSkills = pgTable("agent_skills", {
   id: uuid("id").primaryKey().defaultRandom(),
-  agentId: uuid("agent_id").notNull(),
-  skillId: uuid("skill_id").notNull(),
+  agentId: uuid("agent_id").notNull().references(() => agents.id),
+  skillId: uuid("skill_id").notNull().references(() => skills.id),
   customInstructions: text("custom_instructions"),
   createdAt: timestamp("created_at").defaultNow(),
 });

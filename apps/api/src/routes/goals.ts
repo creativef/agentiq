@@ -15,7 +15,6 @@ goalsRouter.get("/goals", async (c) => {
       id: goals.id,
       companyId: goals.companyId,
       title: goals.title,
-      description: goals.description,
       parentId: goals.parentId,
       progress: goals.progress,
       createdAt: goals.createdAt,
@@ -63,7 +62,6 @@ goalsRouter.post("/companies/:companyId/goals", async (c) => {
   const newGoal = await db.insert(goals).values({
     companyId,
     title: body.title.trim(),
-    description: body.description ?? null,
     parentId: body.parentId ?? null,
     progress: body.progress ?? 0,
   }).returning();
@@ -88,7 +86,6 @@ goalsRouter.put("/goals/:goalId", async (c) => {
 
   await db.update(goals).set({
     title: body.title,
-    description: body.description,
     parentId: body.parentId,
     progress: body.progress !== undefined ? body.progress : undefined,
   }).where(sql`${goals.id} = ${goalId}`);
