@@ -7,6 +7,7 @@ import CompanyWizard from "../components/CompanyWizard";
 const nav = [
   { path: "/dashboard", label: "Dashboard", icon: "\u{1F3E0}" },
   { path: "/tasks", label: "Tasks", icon: "\u{1F4CB}" },
+  { path: "/history", label: "History", icon: "\u{1F4DC}" },
   { path: "/agents", label: "Agents", icon: "\u{1F916}" },
   { path: "/projects", label: "Projects", icon: "\u{1F4C1}" },
   { path: "/calendar", label: "Calendar", icon: "\u{1F4C5}" },
