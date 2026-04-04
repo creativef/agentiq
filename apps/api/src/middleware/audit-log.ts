@@ -11,15 +11,13 @@ import { db } from "../db/client";
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id"),
-  userEmail: text("email"),
-  method: text("method").notNull(), // GET, POST, PUT, DELETE
+  email: text("email"),
+  method: text("method").notNull(),
   path: text("path").notNull(),
   statusCode: text("status_code").notNull(),
-  resourceType: text("resource_type"), // companies, agents, tasks, etc.
-  resourceId: text("resource_id"),
-  userAgent: text("user_agent"),
   ip: text("ip"),
-  message: text("message"),
+  userAgent: text("user_agent"),
+  meta: text("meta"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -53,15 +51,12 @@ export async function auditMiddleware(c: Context, next: Next) {
   try {
     await db.insert(auditLog).values({
       userId: user?.userId ?? null,
-      userEmail: user?.email ?? null,
+      email: user?.email ?? null,
       method,
       path,
       statusCode: String(statusCode),
-      resourceType,
-      resourceId,
       userAgent: c.req.header("user-agent") ?? null,
       ip,
-      message: `${method} ${path} => ${statusCode} (${Date.now() - startTime}ms)`,
     });
   } catch (e) {
     // Don't let audit logging failures break the response
