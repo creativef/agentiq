@@ -38,7 +38,7 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AgentItem | null>(null);
-  const [form, setForm] = useState({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [] as string[] });
+  const [form, setForm] = useState({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [] as string[], reportsTo: "" });
   const [editForm, setEditForm] = useState({ name: "", status: "", budgetLimit: "", heartbeatInterval: "", reportsTo: "" });
   const [agentSkills, setAgentSkills] = useState<Skill[]>([]);
   const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
@@ -72,7 +72,7 @@ export default function AgentsPage() {
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!company) return;
-    const res = await fetch(`/api/companies/${company.id}/agents`, {
+      const res = await fetch(`/api/companies/${company.id}/agents`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -82,10 +82,11 @@ export default function AgentsPage() {
         budgetLimit: form.budgetLimit ? Number(form.budgetLimit) : null,
         heartbeatInterval: Number(form.heartbeatInterval),
         skillIds: form.skillIds,
+        reportsTo: form.reportsTo || null,
       }),
     });
     if (res.ok) {
-      setForm({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [] });
+      setForm({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [], reportsTo: "" });
       fetchAgents();
       setShowForm(false);
     }
@@ -227,6 +228,29 @@ export default function AgentsPage() {
               <option value="300">Every 5 min</option>
               <option value="3600">Every hour</option>
               <option value="86400">Daily</option>
+            </select>
+          </div>
+
+          {/* Reporting section */}
+          <div style={{ marginTop: "0.75rem" }}>
+            <div style={{ fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>
+              Reports To
+              <span className="tooltip-trigger" style={{ fontSize: "8px", marginLeft: "6px" }}>
+                ?
+                <span className="tooltip-bubble">Select who this agent reports to. Leave empty if this agent is top-level.</span>
+              </span>
+            </div>
+            <select
+              value={form.reportsTo}
+              onChange={e => setForm({...form, reportsTo: e.target.value})}
+              style={{ padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", width: "100%", boxSizing: "border-box" }}
+            >
+              <option value="">— None (Top-level) —</option>
+              {sorted.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.role === "FOUNDER" ? "🚀 " : a.role === "CEO" ? "👔 " : a.role === "MANAGER" ? "📋 " : ""}{a.name} ({a.role})
+                </option>
+              ))}
             </select>
           </div>
 
