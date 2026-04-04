@@ -1,190 +1,175 @@
-     1|import postgres from 'postgres';
-     2|
-     3|async function main() {
-     4|  const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:***@localhost:5432/missioncontrol';
-     5|  const sql = postgres(connectionString, { max: 1 });
-     6|
-     7|  console.log("Creating tables...");
-     8|
-     9|  const tables = [
-    10|    [`users`, `
-    11|      CREATE TABLE IF NOT EXISTS users (
-    12|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    13|        email TEXT NOT NULL UNIQUE,
-    14|        password_hash TEXT NOT NULL,
-    15|        role TEXT NOT NULL DEFAULT 'OWNER',
-    16|        created_at TIMESTAMP DEFAULT NOW()
-    17|      )
-    18|    `],
-    19|    [`companies`, `
-    20|      CREATE TABLE IF NOT EXISTS companies (
-    21|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    22|        name TEXT NOT NULL,
-    23|        goal TEXT NOT NULL DEFAULT 'Building something amazing',
-    24|        created_at TIMESTAMP DEFAULT NOW()
-    25|      )
-    26|    `],
-    27|    [`company_members`, `
-    28|      CREATE TABLE IF NOT EXISTS company_members (
-    29|        company_id UUID NOT NULL REFERENCES companies(id),
-    30|        user_id UUID NOT NULL REFERENCES users(id),
-    31|        role TEXT NOT NULL,
-    32|        created_at TIMESTAMP DEFAULT NOW(),
-    33|        PRIMARY KEY (company_id, user_id)
-    34|      )
-    35|    `],
-    36|    [`projects`, `
-    37|      CREATE TABLE IF NOT EXISTS projects (
-    38|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    39|        company_id UUID NOT NULL REFERENCES companies(id),
-    40|        name TEXT NOT NULL,
-    41|        created_at TIMESTAMP DEFAULT NOW()
-    42|      )
-    43|    `],
-    44|    [`agents`, `
-    45|      CREATE TABLE IF NOT EXISTS agents (
-    46|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    47|        company_id UUID NOT NULL REFERENCES companies(id),
-    48|        project_id UUID REFERENCES projects(id),
-    49|        platform TEXT,
-    50|        external_id TEXT,
-    51|        name TEXT NOT NULL,
-    52|        role TEXT,
-    53|        status TEXT DEFAULT 'idle',
-    54|        heartbeat_interval INT,
-    55|        last_heartbeat TIMESTAMP,
-    56|        cost_monthly INT DEFAULT 0,
-    57|        budget_limit INT,
-    58|        reports_to UUID REFERENCES agents(id),
-    59|        created_at TIMESTAMP DEFAULT NOW()
-    60|      )
-    61|    `],
-    62|    [`tasks`, `
-    63|      CREATE TABLE IF NOT EXISTS tasks (
-    64|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    65|        project_id UUID REFERENCES projects(id),
-    66|        agent_id UUID REFERENCES agents(id),
-    67|        title TEXT NOT NULL,
-    68|        description TEXT,
-    69|        status TEXT DEFAULT 'backlog',
-    70|        priority TEXT DEFAULT 'medium',
-    71|        created_at TIMESTAMP DEFAULT NOW()
-    72|      )
-    73|    `],
-    74|    [`events`, `
-    75|      CREATE TABLE IF NOT EXISTS events (
-    76|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    77|        company_id UUID REFERENCES companies(id),
-    78|        project_id UUID REFERENCES projects(id),
-    79|        agent_id UUID REFERENCES agents(id),
-    80|        platform TEXT,
-    81|        type TEXT NOT NULL,
-    82|        payload TEXT,
-    83|        created_at TIMESTAMP DEFAULT NOW()
-    84|      )
-    85|    `],
-    86|    [`connectors`, `
-    87|      CREATE TABLE IF NOT EXISTS connectors (
-    88|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    89|        company_id UUID NOT NULL REFERENCES companies(id),
-    90|        platform TEXT NOT NULL,
-    91|        webhook_secret TEXT,
-    92|        api_key TEXT,
-    93|        api_url TEXT,
-    94|        enabled BOOLEAN DEFAULT true,
-    95|        config JSONB,
-    96|        created_at TIMESTAMP DEFAULT NOW()
-    97|      )
-    98|    `],
-    99|    [`goals`, `
-   100|      CREATE TABLE IF NOT EXISTS goals (
-   101|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-   102|        company_id UUID NOT NULL REFERENCES companies(id),
-   103|        title TEXT NOT NULL,
-   104|        description TEXT,
-   105|        parent_id UUID,
-   106|        progress INT DEFAULT 0,
-   107|        created_at TIMESTAMP DEFAULT NOW()
-   108|      )
-   109|    `],
-   110|    [`calendar_events`, `
-   111|      CREATE TABLE IF NOT EXISTS calendar_events (
-   112|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-   113|        company_id UUID NOT NULL REFERENCES companies(id),
-   114|        title TEXT NOT NULL,
-   115|        date TEXT NOT NULL,
-   116|        time TEXT,
-   117|        agenda TEXT,
-   118|        created_at TIMESTAMP DEFAULT NOW()
-   119|      )
-   120|    `],
-   121|    [`chat_messages`, `
-   122|      CREATE TABLE IF NOT EXISTS chat_messages (
-   123|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-   124|        company_id UUID NOT NULL REFERENCES companies(id),
-   125|        user_id UUID REFERENCES users(id),
-   126|        role TEXT NOT NULL,
-   127|        content TEXT NOT NULL,
-   128|        created_at TIMESTAMP DEFAULT NOW()
-   129|      )
-   130|    `],
-   131|    [`journal_entries`, `
-   132|      CREATE TABLE IF NOT EXISTS journal_entries (
-   133|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-   134|        company_id UUID NOT NULL REFERENCES companies(id),
-   135|        user_id UUID REFERENCES users(id),
-   136|        content TEXT NOT NULL,
-   137|        created_at TIMESTAMP DEFAULT NOW()
-   138|      )
-   139|    `],
-   140|    [`audit_log`, `
-   141|      CREATE TABLE IF NOT EXISTS audit_log (
-   142|        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-   143|        user_id TEXT,
-   144|        user_email TEXT,
-   145|        method TEXT NOT NULL,
-   146|        path TEXT NOT NULL,
-   147|        status_code TEXT NOT NULL,
-   148|        resource_type TEXT,
-   149|        resource_id TEXT,
-   150|        user_agent TEXT,
-   151|        ip TEXT,
-   152|        message TEXT,
-   153|        created_at TIMESTAMP DEFAULT NOW()
-   154|      )
-   155|    `],
-   156|  ];
-   157|
-   158|  for (const [name, stmt] of tables) {
-   159|    try {
-   160|      await sql.unsafe(stmt);
-   161|      console.log(`  [OK] ${name}`);
-   162|    } catch (e: any) {
-   163|      console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
-   164|    }
-   165|  }
-   166|
-   167|  // Add platform/external_id columns to agents if they exist without them
-   168|  console.log("\nAdding columns to existing tables if needed...");
-   169|  const columnAdditions = [
-   170|    ['agents', 'platform', 'ALTER TABLE agents ADD COLUMN IF NOT EXISTS platform TEXT'],
-   171|    ['agents', 'external_id', 'ALTER TABLE agents ADD COLUMN IF NOT EXISTS external_id TEXT'],
-   172|    ['events', 'platform', 'ALTER TABLE events ADD COLUMN IF NOT EXISTS platform TEXT'],
-   173|  ];
-   174|
-   175|  for (const [table, col, stmt] of columnAdditions) {
-   176|    try {
-   177|      await sql.unsafe(stmt);
-   178|      console.log(`  [OK] ${table}.${col}`);
-   179|    } catch (e: any) {
-   180|      if (e.message.includes('already')) {
-   181|        console.log(`  [SKIP] ${table}.${col}: already exists`);
-   182|      } else {
-   183|        console.log(`  [WARN] ${table}.${col}: ${e.message.split('\n')[0]}`);
-   184|      }
-   185|    }
-   186|  }
-   187|
+import postgres from 'postgres';
+
+async function main() {
+  const connectionString = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/missioncontrol';
+  const sql = postgres(connectionString, { max: 1 });
+
+  console.log("Creating tables...");
+
+  const tables = [
+    [`users`, `
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'OWNER',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`companies`, `
+      CREATE TABLE IF NOT EXISTS companies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        goal TEXT NOT NULL DEFAULT 'Default goal',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`company_members`, `
+      CREATE TABLE IF NOT EXISTS company_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role TEXT NOT NULL DEFAULT 'MEMBER',
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(company_id, user_id)
+      )
+    `],
+    [`projects`, `
+      CREATE TABLE IF NOT EXISTS projects (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`agents`, `
+      CREATE TABLE IF NOT EXISTS agents (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        project_id UUID REFERENCES projects(id),
+        name TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'AGENT',
+        status TEXT NOT NULL DEFAULT 'idle',
+        last_heartbeat TIMESTAMP,
+        cost_monthly INTEGER DEFAULT 0,
+        budget_limit INTEGER,
+        reports_to UUID REFERENCES agents(id),
+        created_at TIMESTAMP DEFAULT NOW(),
+        heartbeat_interval INTEGER DEFAULT 3600,
+        platform TEXT,
+        external_id TEXT
+      )
+    `],
+    [`tasks`, `
+      CREATE TABLE IF NOT EXISTS tasks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        agent_id UUID REFERENCES agents(id),
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'todo',
+        priority TEXT DEFAULT 'medium',
+        created_at TIMESTAMP DEFAULT NOW(),
+        due_date TIMESTAMP
+      )
+    `],
+    [`events`, `
+      CREATE TABLE IF NOT EXISTS events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        project_id UUID REFERENCES projects(id),
+        type TEXT NOT NULL,
+        actor TEXT,
+        description TEXT,
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`connectors`, `
+      CREATE TABLE IF NOT EXISTS connectors (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL,
+        config JSONB,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`goals`, `
+      CREATE TABLE IF NOT EXISTS goals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        progress INTEGER DEFAULT 0,
+        parent_id UUID REFERENCES goals(id),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`journal_entries`, `
+      CREATE TABLE IF NOT EXISTS journal_entries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id),
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`audit_log`, `
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id),
+        email TEXT,
+        company_id UUID REFERENCES companies(id),
+        project_id UUID REFERENCES projects(id),
+        method TEXT,
+        path TEXT,
+        status_code INTEGER,
+        ip TEXT,
+        user_agent TEXT,
+        meta JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`skills`, `
+      CREATE TABLE IF NOT EXISTS skills (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        description TEXT,
+        instructions TEXT NOT NULL,
+        icon TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `],
+    [`agent_skills`, `
+      CREATE TABLE IF NOT EXISTS agent_skills (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+        skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+        custom_instructions TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(agent_id, skill_id)
+      )
+    `],
+  ];
+
+  for (const [name, stmt] of tables) {
+    try {
+      await sql.unsafe(stmt);
+      console.log(`  [OK] ${name}`);
+    } catch (e: any) {
+      console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  // Add the reports_to column if table already exists
+  try {
+    await sql.unsafe(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS reports_to UUID REFERENCES agents(id)`);
+    console.log("  [OK] agents.reports_to");
+  } catch (e: any) {
+    console.log(`  [SKIP] reports_to column: ${e.message.split('\n')[0]}`);
+  }
+
   console.log("\nAll tables ready!");
 
   // Add indexes on foreign keys and common query columns
@@ -200,6 +185,11 @@
     ['idx_projects_company_id', 'CREATE INDEX IF NOT EXISTS idx_projects_company_id ON projects(company_id)'],
     ['idx_connectors_company', 'CREATE INDEX IF NOT EXISTS idx_connectors_company ON connectors(company_id, platform)'],
     ['idx_goals_company_id', 'CREATE INDEX IF NOT EXISTS idx_goals_company_id ON goals(company_id)'],
+    ['idx_agent_skills_agent_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_agent_id ON agent_skills(agent_id)'],
+    ['idx_agent_skills_skill_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_skill_id ON agent_skills(skill_id)'],
+    ['idx_skills_category', 'CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category)'],
+    ['idx_agents_reports_to', 'CREATE INDEX IF NOT EXISTS idx_agents_reports_to ON agents(reports_to)'],
+    ['idx_journal_company_id', 'CREATE INDEX IF NOT EXISTS idx_journal_company_id ON journal_entries(company_id)'],
   ];
 
   for (const [name, stmt] of indexes) {
@@ -209,41 +199,6 @@
     } catch (e: any) {
       console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
     }
-  }
-
-  // Create skill tables
-  console.log("\nCreating skill tables...");
-  try {
-    await sql.unsafe(`
-      CREATE TABLE IF NOT EXISTS skills (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        description TEXT,
-        instructions TEXT NOT NULL,
-        icon TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
-    console.log("  [OK] skills");
-  } catch (e: any) {
-    console.log(`  [SKIP] skills: ${e.message.split('\n')[0]}`);
-  }
-
-  try {
-    await sql.unsafe(`
-      CREATE TABLE IF NOT EXISTS agent_skills (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-        skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
-        custom_instructions TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(agent_id, skill_id)
-      )
-    `);
-    console.log("  [OK] agent_skills");
-  } catch (e: any) {
-    console.log(`  [SKIP] agent_skills: ${e.message.split('\n')[0]}`);
   }
 
   // Seed skill templates if none exist
@@ -280,25 +235,7 @@
     console.log("\nSkills already seeded, skipping.");
   }
 
-  // Skill indexes
-  console.log("\nCreating skill indexes...");
-  const skillIndexes = [
-    ['idx_agent_skills_agent_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_agent_id ON agent_skills(agent_id)'],
-    ['idx_agent_skills_skill_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_skill_id ON agent_skills(skill_id)'],
-    ['idx_skills_category', 'CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category)'],
-  ];
-
-  for (const [name, stmt] of skillIndexes) {
-    try {
-      await sql.unsafe(stmt);
-      console.log(`  [OK] ${name}`);
-    } catch (e: any) {
-      console.log(`  [SKIP] ${name}: ${e.message.split('\n')[0]}`);
-    }
-  }
-
   await sql.end();
 }
 
 main().catch(console.error);
-   259|
