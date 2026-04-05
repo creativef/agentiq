@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { tasks, agents, projects, companyMembers, companies, goals, agentSkills, skills as skillsTable, agentLogs } from "../db/schema";
+import { tasks, agents, projects, companyMembers, companies, goals, agentSkills, skills as skillsTable, agentLogs, chatMessages } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 import { logAgentActivity } from "../utils/agentLogger";
 
@@ -309,10 +309,26 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
 
   try {
     const result = await executeTask(execContext);
+    
     await db.update(tasks).set({
       execStatus: result.success ? "completed" : "failed",
       status: result.success ? "done" : "blocked", result: result.report,
     }).where(sql`${tasks.id} = ${taskId}`);
+
+    // CHAT INTEGRATION: If this task came from a Chat message, reply back!
+    if (task.title.toLowerCase().startsWith("chat:")) {
+      const replyToUser = task.assignedBy;
+      if (replyToUser) {
+        await db.insert(chatMessages).values({
+          companyId: companyId,
+          agentId: task.agentId || null,
+          userId: replyToUser,
+          content: result.success ? `✅ Done: ${result.report}` : `⚠️ ${result.report}`,
+          role: "agent",
+        });
+      }
+    }
+
     return c.json({ success: result.success, steps: result.steps, result: result.report });
   } catch (e: any) {
     await db.update(tasks).set({

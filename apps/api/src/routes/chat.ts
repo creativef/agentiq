@@ -1,29 +1,29 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { chatMessages, companyMembers, companies, agents, users, tasks } from "../db/schema";
+import { chatMessages, companyMembers, tasks, companies, agents, users } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 import { rateLimitMiddleware } from "../middleware/rate-limiter";
-import { logAgentActivity } from "../utils/agentLogger";
 
 export const chatRouter = new Hono();
 chatRouter.use(authMiddleware);
 
-// GET /chat — list messages with pagination
+// GET /chat — list messages
 chatRouter.get("/chat", async (c) => {
   const user: UserPayload = c.get("user");
   const targetAgentId = c.req.query("agentId") || null;
-  const limit = Math.min(parseInt(c.req.query("limit") || "50"), 200);
-  const offset = parseInt(c.req.query("offset") || "0");
-
-  const companyId = c.req.query("companyId");
-
-  const baseWhere = sql`
-    ${companyMembers.companyId} = ${companies.id}
-    AND ${companyMembers.userId} = ${user.userId}
-    ${targetAgentId ? sql`AND (${chatMessages.agentId} = ${targetAgentId} OR ${chatMessages.agentId} IS NULL)` : sql`AND ${chatMessages.agentId} IS NULL`}
-    ${companyId ? sql`AND ${chatMessages.companyId} = ${companyId}` : sql``}
-  `;
+  
+  const baseWhere = targetAgentId
+    ? sql`(
+        (${companyMembers.userId} = ${user.userId}) 
+        AND (${chatMessages.companyId} = ${companyMembers.companyId})
+        AND (${chatMessages.agentId} = ${targetAgentId} OR ${chatMessages.agentId} IS NULL)
+      )`
+    : sql`(
+        (${companyMembers.userId} = ${user.userId}) 
+        AND (${chatMessages.companyId} = ${companyMembers.companyId})
+        AND (${chatMessages.agentId} IS NULL)
+      )`;
 
   const rows = await db
     .select({
@@ -31,7 +31,6 @@ chatRouter.get("/chat", async (c) => {
       content: chatMessages.content,
       role: chatMessages.role,
       agentId: chatMessages.agentId,
-      userId: chatMessages.userId,
       createdAt: chatMessages.createdAt,
       agentName: agents.name,
       userEmail: users.email,
@@ -42,35 +41,29 @@ chatRouter.get("/chat", async (c) => {
     .innerJoin(companyMembers, baseWhere)
     .leftJoin(users, sql`${chatMessages.userId} = ${users.id}`)
     .orderBy(chatMessages.createdAt)
-    .limit(limit)
-    .offset(offset);
+    .limit(50); // Default limit
 
-  const count = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(chatMessages)
-    .leftJoin(companies, sql`${chatMessages.companyId} = ${companies.id}`)
-    .innerJoin(companyMembers, sql`
-      ${companyMembers.companyId} = ${companies.id}
-      AND ${companyMembers.userId} = ${user.userId}
-      ${targetAgentId ? sql`AND (${chatMessages.agentId} = ${targetAgentId} OR ${chatMessages.agentId} IS NULL)` : sql`AND ${chatMessages.agentId} IS NULL`}
-    `)
-    .limit(1);
-
-  const total = count[0]?.count || 0;
-  const hasMore = (offset + limit) < total;
-
-  return c.json({ messages: rows, hasMore, total });
+  return c.json({ messages: rows });
 });
 
 // POST /chat — send a message
 chatRouter.post("/chat", async (c) => {
   const user: UserPayload = c.get("user");
+  const ip = c.req.header("x-forwarded-for") || "unknown";
+  
+  // Rate limiting
+  const rl = rateLimitMiddleware(ip);
+  if (!rl.allowed) {
+    return c.json({ error: `Too fast. Wait ${rl.retryAfter}s` }, 429);
+  }
+
   const body = await c.req.json().catch(() => ({}));
 
   if (!body.content || !body.companyId) {
-    return c.json({ error: "content and companyId required" }, 400);
+    return c.json({ error: "Missing content or companyId" }, 400);
   }
 
+  // Verify access
   const access = await db.select()
     .from(companyMembers)
     .where(sql`${companyMembers.companyId} = ${body.companyId} AND ${companyMembers.userId} = ${user.userId}`)
@@ -78,13 +71,7 @@ chatRouter.post("/chat", async (c) => {
   
   if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
 
-  // Priority 4: Rate limiting
-  const ip = c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "unknown";
-  const rl = rateLimitMiddleware(ip);
-  if (!rl.allowed) {
-    return c.json({ success: false, error: `Too many messages. Try again in ${rl.retryAfter}s` }, 429);
-  }
-
+  // 1. Save the message
   const msg = await db.insert(chatMessages).values({
     companyId: body.companyId,
     agentId: body.agentId || null,
@@ -93,57 +80,67 @@ chatRouter.post("/chat", async (c) => {
     role: "user",
   }).returning();
 
-  // Priority 1: Chat-to-Task Integration
-  // If it's a DM to an agent, auto-create a task for that agent
+  // 2. Chat-to-Task (Direct Command)
   if (body.agentId) {
     try {
-      const preview = body.content.length > 50
-        ? `${body.content.substring(0, 50)}...`
-        : body.content;
+      // Check if the agent is actually in this company
+      const agentCheck = await db.select({ id: agents.id, name: agents.name, projectId: agents.projectId })
+        .from(agents)
+        .where(sql`${agents.id} = ${body.agentId} AND ${agents.companyId} = ${body.companyId}`)
+        .limit(1);
 
+      if (agentCheck.length === 0) {
+         return c.json({ error: "Target agent not found in this company" }, 404);
+      }
+
+      // Find a valid projectId. The DB requires NOT NULL.
+      let targetProjectId = agentCheck[0].projectId;
+
+      if (!targetProjectId) {
+         // Fallback: Find the first project for this company
+         const proj = await db.select({ id: projects.id })
+           .from(projects)
+           .where(sql`${projects.companyId} = ${body.companyId}`)
+           .limit(1);
+         
+         if (proj.length > 0) {
+           targetProjectId = proj[0].id;
+         } else {
+           // If NO projects exist, create a default one for the chat
+           const newProj = await db.insert(projects).values({ 
+             companyId: body.companyId, 
+             name: "Chat Operations" 
+           }).returning();
+           targetProjectId = newProj[0].id;
+         }
+      }
+
+      const taskTitle = `Chat: ${body.content.substring(0, 40)}${body.content.length > 40 ? '...' : ''}`;
+      
       const newTask = await db.insert(tasks).values({
-        title: `Chat: ${preview}`,
-        description: `Message from chat: "${body.content}"`,
+        title: taskTitle,
+        description: `User message: "${body.content}"`,
         status: "backlog",
-        execStatus: "ready",
+        execStatus: "ready", // Ready to run immediately
         agentId: body.agentId,
-        projectId: body.projectId || null,
+        projectId: targetProjectId, 
         assignedBy: user.userId,
       }).returning();
 
-      // Log it so the CEO sees the interaction in activity feed
-      await db.execute(sql.raw(`
-        INSERT INTO agent_logs (agent_id, task_id, level, message)
-        VALUES ('${body.agentId}'::uuid, '${newTask[0].id}'::uuid, 'info', 'New chat message received.')
-      `));
+      console.log(`[Chat] Created Task ${newTask[0].id} for ${agentCheck[0].name}: "${taskTitle}"`);
 
-      return c.json({ message: msg[0], taskId: newTask[0].id, taskCreated: true });
-    } catch (e) {
-      console.error("Chat→Task creation failed:", e);
+      return c.json({ 
+        message: msg[0], 
+        taskCreated: true, 
+        taskId: newTask[0].id 
+      });
+
+    } catch (e: any) {
+      console.error("[Chat] Task Creation Failed:", e.message);
+      return c.json({ message: msg[0], taskCreated: false, error: "Task creation failed: " + e.message });
     }
   }
-
   return c.json({ message: msg[0], taskCreated: false });
 });
 
-// DELETE /chat/:messageId
-chatRouter.delete("/chat/:messageId", async (c) => {
-  const messageId = c.req.param("messageId");
-  const user: UserPayload = c.get("user");
-
-  const msgCheck = await db
-    .select({ companyId: chatMessages.companyId })
-    .from(chatMessages)
-    .leftJoin(companies, sql`${chatMessages.companyId} = ${companies.id}`)
-    .innerJoin(companyMembers, sql`
-      ${companyMembers.companyId} = ${companies.id}
-      AND ${companyMembers.userId} = ${user.userId}
-    `)
-    .where(sql`${chatMessages.id} = ${messageId}`)
-    .limit(1);
-
-  if (msgCheck.length === 0) return c.json({ error: "Not found or unauthorized" }, 404);
-
-  await db.delete(chatMessages).where(sql`${chatMessages.id} = ${messageId}`);
-  return c.json({ ok: true });
-});
+export { chatRouter };
