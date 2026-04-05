@@ -40,8 +40,9 @@ export default function AgentsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AgentItem | null>(null);
-  const [form, setForm] = useState({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [] as string[], reportsTo: "" });
-  const [editForm, setEditForm] = useState({ name: "", status: "", budgetLimit: "", heartbeatInterval: "", reportsTo: "" });
+  // Form: add altReportsTo array for Founders
+  const [form, setForm] = useState({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [] as string[], reportsTo: "", altReportsTo: [] as string[] });
+  const [editForm, setEditForm] = useState({ name: "", status: "", budgetLimit: "", heartbeatInterval: "", reportsTo: "", altReportsTo: [] as string[] });
   const [agentSkills, setAgentSkills] = useState<Skill[]>([]);
   const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
   const [showSkillPicker, setShowSkillPicker] = useState(false);
@@ -117,6 +118,7 @@ export default function AgentsPage() {
       budgetLimit: agent.budgetLimit ? String(agent.budgetLimit) : "",
       heartbeatInterval: agent.heartbeatInterval ? String(agent.heartbeatInterval) : "3600",
       reportsTo: agent.reportsTo || "",
+      altReportsTo: agent.altReportsTo || [],
     });
     fetch(`/api/agents/${agent.id}/skills`, { credentials: "include" })
       .then(r => r.ok ? r.json() : null)
@@ -129,24 +131,24 @@ export default function AgentsPage() {
   const handleSaveEdit = async () => {
     if (!editing) return;
 
-    const body: Record<string, any> = {
-      name: editForm.name,
-      status: editForm.status || undefined,
-      budgetLimit: editForm.budgetLimit ? Number(editForm.budgetLimit) : null,
-      heartbeatInterval: Number(editForm.heartbeatInterval),
-      reportsTo: editForm.reportsTo || null,
-    };
-
-    // If editing a CEO, auto-set altReportsTo to all founders
-    if (editing.role === "CEO" && founderIds.length > 0) {
-      body.altReportsTo = founderIds;
+    // If editing a CEO and no altReportsTo set, auto-set to all founders
+    let altReportsTo = editForm.altReportsTo;
+    if (editing.role === "CEO" && founderIds.length > 0 && altReportsTo.length === 0) {
+      altReportsTo = founderIds;
     }
 
     await fetch(`/api/agents/${editing.id}`, {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        name: editForm.name,
+        status: editForm.status || undefined,
+        budgetLimit: editForm.budgetLimit ? Number(editForm.budgetLimit) : null,
+        heartbeatInterval: Number(editForm.heartbeatInterval),
+        reportsTo: editForm.reportsTo || null,
+        altReportsTo,
+      }),
     });
     setEditing(null);
     fetchAgents();
@@ -255,6 +257,44 @@ export default function AgentsPage() {
               <option value="86400">Daily</option>
             </select>
           </div>
+
+          {/* Founder reporting (checkboxes for CEO) */}
+          {form.role === "CEO" && founderIds.length > 0 && (
+            <div style={{ marginTop: "0.75rem" }}>
+              <div style={{ fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "6px" }}>
+                Reports to Founders
+                <span className="tooltip-trigger" style={{ fontSize: "8px", marginLeft: "6px" }}>
+                  ?
+                  <span className="tooltip-bubble">Select which Founders this CEO reports to. Check all that apply.</span>
+                </span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                {sorted.filter(a => a.role === "FOUNDER").map(founder => (
+                  <label key={founder.id} style={{
+                    display: "flex", alignItems: "center", gap: "6px",
+                    background: form.altReportsTo.includes(founder.id) ? "#2563eb" : "#374151",
+                    padding: "6px 10px", borderRadius: "6px", cursor: "pointer",
+                    border: form.altReportsTo.includes(founder.id) ? "1px solid #3b82f6" : "1px solid #4B5563",
+                    fontSize: "0.8rem", color: "white",
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={form.altReportsTo.includes(founder.id)}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setForm(f => ({...f, altReportsTo: [...f.altReportsTo, founder.id]}));
+                        } else {
+                          setForm(f => ({...f, altReportsTo: f.altReportsTo.filter(id => id !== founder.id)}));
+                        }
+                      }}
+                      style={{ accentColor: "#3b82f6" }}
+                    />
+                    🚀 {founder.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Reporting section */}
           <div style={{ marginTop: "0.75rem" }}>
@@ -371,6 +411,38 @@ export default function AgentsPage() {
                         <option key={ag.id} value={ag.id}>{ag.role === "FOUNDER" ? "🚀 " : ag.role === "CEO" ? "👔 " : ""}{ag.name} ({ag.role})</option>
                       ))}
                     </select>
+
+                    {/* Founder multi-select for CEO */}
+                    {editing.role === "CEO" && founderIds.length > 0 && (
+                      <div style={{ marginTop: "8px", marginBottom: "4px" }}>
+                        <div style={{ fontSize: "0.7rem", fontWeight: "bold", color: "#60a5fa", marginBottom: "4px" }}>Reports to Founders:</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                          {sorted.filter(a => a.role === "FOUNDER").map(founder => (
+                            <label key={founder.id} style={{
+                              display: "flex", alignItems: "center", gap: "4px",
+                              background: editForm.altReportsTo.includes(founder.id) ? "#2563eb" : "#374151",
+                              padding: "4px 8px", borderRadius: "4px", cursor: "pointer",
+                              border: editForm.altReportsTo.includes(founder.id) ? "1px solid #3b82f6" : "1px solid #4B5563",
+                              fontSize: "0.7rem", color: "white",
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={editForm.altReportsTo.includes(founder.id)}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setEditForm(f => ({...f, altReportsTo: [...f.altReportsTo, founder.id]}));
+                                  } else {
+                                    setEditForm(f => ({...f, altReportsTo: f.altReportsTo.filter(id => id !== founder.id)}));
+                                  }
+                                }}
+                                style={{ accentColor: "#3b82f6" }}
+                              />
+                              🚀 {founder.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {/* Skills in edit mode */}
                     <div style={{ marginTop: "0.5rem" }}>
                       <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "4px" }}>Skills</div>
