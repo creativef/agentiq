@@ -25,7 +25,9 @@ export default function ChatJournal() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null); // null = Team
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const lastFetch = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
+  const isAtBottom = useRef(true);
 
   // Fetch Agents for the "Compose To" dropdown
   useEffect(() => {
@@ -41,7 +43,7 @@ export default function ChatJournal() {
     if (!company) return;
     const url = selectedAgentId
       ? `/api/chat?agentId=${selectedAgentId}`
-      : `/api/chat`; // "ALL" or Team view
+      : `/api/chat`;
     
     fetch(url, { credentials: "include" })
       .then(r => r.ok ? r.json() : null)
@@ -51,9 +53,32 @@ export default function ChatJournal() {
 
   useEffect(() => { fetchMessages(); }, [fetchMessages]);
 
-  // Auto-scroll
+  // Priority 2: Auto-refresh (Polling)
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const interval = setInterval(fetchMessages, 5000);
+    return () => clearInterval(interval);
+  }, [fetchMessages]);
+
+  // Polling with debounce (don't poll right after manual fetch)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Date.now() - lastFetch.current < 3000) return; // Skip if recently fetched
+      fetchMessages();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [fetchMessages]);
+
+  // Detect if user is at bottom of chat
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+  }, []);
+
+  // Only auto-scroll if user was already at the bottom
+  useEffect(() => {
+    if (isAtBottom.current) {
+      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages.length]);
 
   const handleSend = async (e: React.FormEvent) => {
@@ -65,20 +90,21 @@ export default function ChatJournal() {
       // selectedAgentId = 'ALL' means Team Chat, otherwise specific agent ID
       const agentIdToSend = selectedAgentId === "ALL" ? null : selectedAgentId;
       
-      await fetch("/api/chat", {
+      const res = await fetch("/api/chat", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           companyId: company.id,
           content: input.trim(),
-          agentId: agentIdToSend, // If null, it's a broadcast message
+          agentId: agentIdToSend,
         }),
       });
-      setInput("");
-      fetchMessages();
-    } catch (e) {
-      console.error("Send failed:", e);
+      if (res.ok) {
+        setInput("");
+        lastFetch.current = Date.now(); // Prevent poll from running immediately
+        fetchMessages();
+      }
     } finally {
       setSending(false);
     }
@@ -122,8 +148,8 @@ export default function ChatJournal() {
         </div>
       </div>
 
-      {/* Messages Area */}
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem", background: "#1f2937", borderRadius: "8px", padding: "1rem" }}>
+  {/* Messages Area */}
+      <div onScroll={handleScroll} style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem", background: "#1f2937", borderRadius: "8px", padding: "1rem" }}>
         {messages.length === 0 ? (
           <div style={{ textAlign: "center", color: "#6b7280", padding: "2rem" }}>
             No messages yet in {chatLabel}.

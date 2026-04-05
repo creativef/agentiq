@@ -156,9 +156,11 @@ export default function CompanyOrg() {
   if (!company) return <p style={{ padding: "2rem", color: "#888" }}>No company selected.</p>;
 
   return (
-    <div style={{ padding: "1.5rem", height: "calc(100vh - 80px)", display: "flex", flexDirection: "column" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", margin: "0 0 1rem 0" }}>Organization Chart — {company.name}</h1>
-      <div style={{ flex: 1, background: "#0f172a", borderRadius: "12px", border: "1px solid #1e293b", position: "relative" }}>
+    <div style={{ padding: "0.25rem", height: "calc(100vh - 10px)", display: "flex", flexDirection: "column" }}>
+      <div style={{ marginBottom: "0.5rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <h1 style={{ fontSize: "1.25rem", fontWeight: "bold", margin: 0 }}>Organization Chart — {company.name}</h1>
+      </div>
+      <div style={{ flex: 1, background: "#0f172a", borderRadius: "8px", border: "1px solid #1e293b", position: "relative", minHeight: "80vh" }}>
         <ReactFlow 
           nodes={nodes}
           edges={edges}
