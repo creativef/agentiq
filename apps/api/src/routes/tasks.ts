@@ -316,17 +316,22 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
     }).where(sql`${tasks.id} = ${taskId}`);
 
     // CHAT INTEGRATION: If this task came from a Chat message, reply back!
-    if (task.title.toLowerCase().startsWith("chat:")) {
-      const replyToUser = task.assignedBy;
-      if (replyToUser) {
-        await db.insert(chatMessages).values({
-          companyId: companyId,
-          agentId: task.agentId || null,
-          userId: replyToUser,
-          content: result.success ? `✅ Done: ${result.report}` : `⚠️ ${result.report}`,
-          role: "agent",
-        });
+    try {
+      if (task.title.toLowerCase().startsWith("chat:")) {
+        const replyToUser = task.assignedBy;
+        if (replyToUser) {
+          await db.insert(chatMessages).values({
+            companyId: companyId,
+            agentId: task.agentId || null,
+            userId: replyToUser,
+            content: result.success ? `✅ Done: ${result.report}` : `⚠️ ${result.report}`,
+            role: "agent",
+          });
+        }
       }
+    } catch (replyErr: any) {
+      // Log error but do NOT crash the task execution
+      console.error("[Task] Failed to send chat reply:", replyErr.message);
     }
 
     return c.json({ success: result.success, steps: result.steps, result: result.report });

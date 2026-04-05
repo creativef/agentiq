@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { chatMessages, companyMembers, tasks, companies, agents, users } from "../db/schema";
+import { companyMembers, companies, agents, users } from "../db/schema";
+import { tasks } from "../db/schema";
+import { chatMessages } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 import { rateLimitMiddleware } from "../middleware/rate-limiter";
 

@@ -15,6 +15,7 @@ const nav = [
   { path: "/calendar", label: "Calendar", icon: "\u{1F4C5}" },
   { path: "/files", label: "Files", icon: "\u{1F4C1}" },
   { path: "/chat", label: "Chat", icon: "\u{1F4AC}" },
+  { path: "/journal", label: "Journal", icon: "\u{1F4D4}" },
   { path: "/org", label: "Org Chart", icon: "\u{1F3E2}" },
   { path: "/integrations", label: "Integrations", icon: "\u{1F50C}" },
   { path: "/company", label: "Company", icon: "\u{2699}" },
