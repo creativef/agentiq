@@ -142,7 +142,5 @@ chatRouter.post("/chat", async (c) => {
       return c.json({ message: msg[0], taskCreated: false, error: "Task creation failed: " + e.message });
     }
   }
-  return c.json({ message: msg[0], taskCreated: false });
-});
-
-export { chatRouter };
+    return c.json({ message: msg[0], taskCreated: false });
+  });
