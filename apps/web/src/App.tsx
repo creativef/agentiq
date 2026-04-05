@@ -7,6 +7,7 @@ import AgentsPage from "./pages/AgentsPage";
 import TaskBoard from "./pages/TaskBoard";
 import TaskHistory from "./pages/TaskHistory";
 import CompanyBriefsPage from "./pages/CompanyBriefsPage";
+import LLMConfigPage from "./pages/LLMConfigPage";
 import CalendarMeetings from "./pages/CalendarMeetings";
 import ChatJournal from "./pages/ChatJournal";
 import FileHub from "./pages/FileHub";
@@ -40,6 +41,9 @@ const AuthedApp = () => (
     </Route>
     <Route path="brief" element={<DashboardLayout />}>
       <Route index element={<CompanyBriefsPage />} />
+    </Route>
+    <Route path="brain" element={<DashboardLayout />}>
+      <Route index element={<LLMConfigPage />} />
     </Route>
     <Route path="calendar" element={<DashboardLayout />}>
       <Route index element={<CalendarMeetings />} />

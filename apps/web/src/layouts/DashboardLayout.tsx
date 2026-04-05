@@ -9,6 +9,7 @@ const nav = [
   { path: "/tasks", label: "Tasks", icon: "\u{1F4CB}" },
   { path: "/history", label: "History", icon: "\u{1F4DC}" },
   { path: "/brief", label: "Brief", icon: "\u{1F4C4}" },
+  { path: "/brain", label: "Brain", icon: "\u{1F9E0}" },
   { path: "/agents", label: "Agents", icon: "\u{1F916}" },
   { path: "/projects", label: "Projects", icon: "\u{1F4C1}" },
   { path: "/calendar", label: "Calendar", icon: "\u{1F4C5}" },
