@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { companyBriefs, companyMembers } from "../db/schema";
+import { companyBriefs, companyMembers, agents, tasks, projects } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
-
-export const briefRouter = new Hono();
 briefRouter.use(authMiddleware);
 
 // GET /companies/:id/brief
@@ -59,7 +58,45 @@ briefRouter.post("/companies/:companyId/brief", async (c) => {
     })
     .returning();
 
-  return c.json({ brief: brief[0] });
+  // BRIEF-TO-TASK: Find CEO agent and create a Strategy Task
+  try {
+    const ceoAgent = await db.select({ id: agents.id, projectId: agents.projectId })
+      .from(agents)
+      .where(sql`${agents.companyId} = ${companyId} AND UPPER(${agents.role}) = 'CEO'`)
+      .limit(1);
+
+    if (ceoAgent.length > 0) {
+      // Find a valid project ID
+      let targetProjectId = ceoAgent[0].projectId;
+      if (!targetProjectId) {
+        const proj = await db.select({ id: projects.id })
+          .from(projects)
+          .where(sql`${projects.companyId} = ${companyId}`)
+          .limit(1);
+        if (proj.length > 0) targetProjectId = proj[0].id;
+      }
+
+      if (targetProjectId) {
+        await db.insert(tasks).values({
+          projectId: targetProjectId,
+          agentId: ceoAgent[0].id,
+          title: "📋 Analyze Brief & Initialize Strategy",
+          description: `The Founders have provided a new company brief:\n\n**Vision:** ${body.vision}\n${body.marketContext ? `**Market Context:** ${body.marketContext}\n` : ""}${body.constraints ? `**Constraints:** ${body.constraints}\n` : ""}${body.priorities ? `**Priorities:** ${body.priorities}\n` : ""}\n\nPlease analyze this brief, create necessary goals, hire any agents needed, and begin executing on this strategy.`,
+          status: "ready",
+          execStatus: "ready",
+          priority: "high",
+          assignedBy: user.userId,
+        });
+        console.log(`[Brief-to-Task] Created strategy task for CEO agent ${ceoAgent[0].id}`);
+      }
+    } else {
+      console.log(`[Brief-to-Task] No CEO agent found to assign strategy task`);
+    }
+  } catch (e: any) {
+    console.error("[Brief-to-Task] Failed to create strategy task:", e.message);
+  }
+
+  return c.json({ brief: brief[0], taskCreated: true });
 });
 
 // PUT /companies/:id/brief/:briefId
