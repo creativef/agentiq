@@ -17,36 +17,29 @@ interface LLMProvider {
 }
 
 const PROVIDER_OPTIONS = [
-  { value: "openai", label: "OpenAI", icon: "🔵", defaultModel: "gpt-4o" },
-  { value: "anthropic", label: "Anthropic (Claude)", icon: "🟣", defaultModel: "claude-3-5-sonnet-20241022" },
-  { value: "openai-compatible", label: "Self-Hosted (OpenAI-Compatible)", icon: "🟢", defaultModel: "llama3.1:70b" },
-  { value: "ollama", label: "Ollama (Local)", icon: "🦙", defaultModel: "llama3.1:8b" },
+  { value: "openai", label: "OpenAI (GPT)", icon: "🔵", defaultUrl: "https://api.openai.com/v1" },
+  { value: "anthropic", label: "Anthropic (Claude)", icon: "🟣", defaultUrl: "https://api.anthropic.com/v1" },
+  { value: "openai-compatible", label: "Custom / OpenAI-Compatible", icon: "🟢", defaultUrl: "" },
+  { value: "ollama", label: "Ollama (Local)", icon: "🦙", defaultUrl: "http://localhost:11434" },
+  { value: "local", label: "vLLM / LM Studio / Local", icon: "💻", defaultUrl: "http://localhost:8000/v1" },
 ];
-
-const MODEL_SUGGESTIONS: Record<string, string[]> = {
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
-  anthropic: ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"],
-  "openai-compatible": ["llama3.1:70b", "mistral:large", "qwen2.5:72b"],
-  ollama: ["llama3.1:8b", "llama3.1:70b", "mistral:7b", "qwen2.5:14b"],
-};
 
 export default function LLMConfigPage() {
   const { company } = useAuth();
   const [providers, setProviders] = useState<LLMProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [testing, setTesting] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<{ success: boolean; latency: number } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; latency: number; error?: string } | null>(null);
 
   const [form, setForm] = useState({
     name: "",
-    provider: "openai",
-    model: "gpt-4o",
+    provider: "openai-compatible",
+    model: "",
     baseUrl: "",
     apiKey: "",
     maxTokens: 4000,
     temperature: 0.3,
-    isActive: false,
   });
 
   const fetchProviders = useCallback(() => {
@@ -60,11 +53,11 @@ export default function LLMConfigPage() {
 
   useEffect(() => { fetchProviders(); }, [fetchProviders]);
 
-  // Update model suggestion when provider changes
+  // Update default URL when provider changes
   useEffect(() => {
     const opt = PROVIDER_OPTIONS.find(p => p.value === form.provider);
-    if (opt && (form.model === "gpt-4o" || form.model === "claude-3-5-sonnet-20241022" || form.model === "llama3.1:8b")) {
-      setForm(prev => ({ ...prev, model: opt.defaultModel }));
+    if (opt && opt.defaultUrl && (!form.baseUrl || form.baseUrl === "")) {
+      setForm(prev => ({ ...prev, baseUrl: opt.defaultUrl }));
     }
   }, [form.provider]);
 
@@ -77,23 +70,12 @@ export default function LLMConfigPage() {
       name: form.name || `${PROVIDER_OPTIONS.find(p => p.value === form.provider)?.label} (${form.model})`,
       provider: form.provider,
       model: form.model,
+      baseUrl: form.baseUrl || null,
+      apiKey: form.apiKey || null,
       maxTokens: form.maxTokens,
       temperature: form.temperature,
-      isActive: form.isActive,
+      isActive: providers.length === 0, // Auto-activate if first provider
     };
-
-    if (form.provider === "openai" || form.provider === "anthropic") {
-      if (!form.apiKey) {
-        alert("API Key is required for " + form.provider);
-        return;
-      }
-      body.apiKey = form.apiKey;
-    }
-
-    if (form.provider === "openai-compatible" || form.provider === "ollama") {
-      body.baseUrl = form.baseUrl || (form.provider === "ollama" ? "http://localhost:11434" : null);
-      if (form.apiKey) body.apiKey = form.apiKey;
-    }
 
     const res = await fetch("/api/llm/providers", {
       method: "POST",
@@ -104,7 +86,7 @@ export default function LLMConfigPage() {
 
     if (res.ok) {
       setShowForm(false);
-      setForm({ name: "", provider: "openai", model: "gpt-4o", baseUrl: "", apiKey: "", maxTokens: 4000, temperature: 0.3, isActive: false });
+      setForm({ name: "", provider: "openai-compatible", model: "", baseUrl: "", apiKey: "", maxTokens: 4000, temperature: 0.3 });
       fetchProviders();
     } else {
       const err = await res.json().catch(() => ({}));
@@ -112,8 +94,7 @@ export default function LLMConfigPage() {
     }
   };
 
-  const handleToggleActive = async (id: string, currentActive: boolean) => {
-    if (currentActive) return; // Deactivate via another provider activation
+  const handleToggleActive = async (id: string) => {
     await fetch(`/api/llm/providers/${id}`, {
       method: "PUT",
       credentials: "include",
@@ -124,39 +105,34 @@ export default function LLMConfigPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this LLM provider?")) return;
+    if (!confirm("Delete this provider?")) return;
     await fetch(`/api/llm/providers/${id}`, { method: "DELETE", credentials: "include" });
     fetchProviders();
   };
 
   const handleTest = async () => {
-    setTesting(form.provider);
+    if (!form.model) { alert("Enter a model name first"); return; }
+    setTesting(true);
     setTestResult(null);
-
-    const body: any = {
-      provider: form.provider,
-      model: form.model,
-      apiKey: form.apiKey || undefined,
-      baseUrl: form.baseUrl || undefined,
-    };
 
     try {
       const res = await fetch("/api/llm/test", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          provider: form.provider,
+          model: form.model,
+          apiKey: form.apiKey || undefined,
+          baseUrl: form.baseUrl || undefined,
+        }),
       });
       const data = await res.json();
-      setTestResult({ success: data.success, latency: data.latency || 0 });
-      if (!data.success) {
-        alert("Test failed: " + (data.error || "Unknown error"));
-      }
+      setTestResult({ success: data.success, latency: data.latency || 0, error: data.error });
     } catch (e: any) {
-      setTestResult({ success: false, latency: 0 });
-      alert("Test failed: " + e.message);
+      setTestResult({ success: false, latency: 0, error: e.message });
     } finally {
-      setTesting(null);
+      setTesting(false);
     }
   };
 
@@ -168,42 +144,26 @@ export default function LLMConfigPage() {
         <div>
           <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", margin: 0 }}>CEO Intelligence</h1>
           <p style={{ fontSize: "0.85rem", color: "#9ca3af", margin: "4px 0 0" }}>
-            🟢 <strong>Hermes</strong> is your primary CEO brain. Add extension LLMs for specialized reasoning or fallback.
+            ⚡ <strong>Hermes</strong> is your primary CEO brain (zero cost). Add extension providers below for fallback or specialized reasoning.
           </p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => { setShowForm(!showForm); setTestResult(null); }}
           style={{ padding: "8px 16px", background: "#3b82f6", border: "none", color: "white", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
         >
-          {showForm ? "Cancel" : "+ Add Extension"}
+          {showForm ? "Cancel" : "+ Add Provider"}
         </button>
       </div>
 
-      {/* Hermes Primary Brain Banner */}
-      <div style={{ background: "#1f2937", padding: "1.25rem", borderRadius: "8px", border: "1px solid #22c55e", marginBottom: "1rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <div style={{ fontSize: "2rem", width: "48px", height: "48px", background: "#052e16", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              ⚡
-            </div>
-            <div>
-              <strong style={{ fontSize: "1rem", color: "#e5e7eb" }}>Hermes Agent</strong>
-              <span style={{ marginLeft: "8px", padding: "2px 8px", background: "#052e16", color: "#22c55e", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>PRIMARY CEO</span>
-              <div style={{ fontSize: "0.8rem", color: "#9ca3af", marginTop: "2px" }}>
-                Your main autonomous orchestrator. Zero additional cost. Manages company operations and delegates to agents.
-              </div>
-            </div>
-          </div>
+      {/* Hermes Primary Banner */}
+      <div style={{ background: "#1f2937", padding: "1.25rem", borderRadius: "8px", border: "1px solid #22c55e", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        <div style={{ fontSize: "2rem", width: "48px", height: "48px", background: "#052e16", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>⚡</div>
+        <div>
+          <strong style={{ fontSize: "1rem", color: "#e5e7eb" }}>Hermes Agent</strong>
+          <span style={{ marginLeft: "8px", padding: "2px 8px", background: "#052e16", color: "#22c55e", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>PRIMARY</span>
+          <div style={{ fontSize: "0.8rem", color: "#9ca3af", marginTop: "2px" }}>Your main CEO brain. Already configured. No extra setup needed.</div>
         </div>
       </div>
-
-      {/* Extension LLMs */}
-      <h3 style={{ fontSize: "0.95rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "0.75rem" }}>Extension LLMs <span style={{ fontWeight: "normal", color: "#6b7280", fontSize: "0.8rem" }}>(optional)</span></h3>
-      <p style={{ fontSize: "0.8rem", color: "#6b7280", marginBottom: "0.75rem" }}>
-        Add specialized or fallback LLMs for specific reasoning tasks, model comparison, or high-load scenarios.
-      </p>
-
-      {/* Provider List */}
 
       {showForm && (
         <form onSubmit={handleSubmit} style={{ background: "#1f2937", padding: "1.5rem", borderRadius: "8px", border: "1px solid #374151", marginBottom: "1.5rem" }}>
@@ -211,7 +171,7 @@ export default function LLMConfigPage() {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
             <div>
-              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>Provider Type *</label>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>Provider Type</label>
               <select
                 value={form.provider}
                 onChange={e => setForm({ ...form, provider: e.target.value })}
@@ -223,124 +183,83 @@ export default function LLMConfigPage() {
               </select>
             </div>
             <div>
-              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>Model Name *</label>
-              <datalist id="model-suggestions">
-                {(MODEL_SUGGESTIONS[form.provider] || []).map(m => <option key={m} value={m} />)}
-              </datalist>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>Display Name</label>
               <input
-                list="model-suggestions"
-                value={form.model}
-                onChange={e => setForm({ ...form, model: e.target.value })}
-                placeholder={PROVIDER_OPTIONS.find(p => p.value === form.provider)?.defaultModel}
-                style={{ width: "100%", padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g., GPT-4o, Local Llama, Claude Backup"
+                style={{ width: "100%", padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", boxSizing: "border-box" }}
               />
             </div>
           </div>
 
           <div style={{ marginBottom: "1rem" }}>
-            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>
-              Name (optional)
-            </label>
+            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>API Base URL</label>
             <input
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g., Primary Brain, Backup Ollama"
+              value={form.baseUrl}
+              onChange={e => setForm({ ...form, baseUrl: e.target.value })}
+              placeholder={form.provider === "openai" ? "https://api.openai.com/v1" : "http://localhost:11434/v1"}
               style={{ width: "100%", padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", boxSizing: "border-box" }}
             />
           </div>
 
-          {/* API Key (for cloud providers) */}
-          {(form.provider === "openai" || form.provider === "anthropic") && (
-            <div style={{ marginBottom: "1rem" }}>
-              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>
-                API Key *
-              </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>Model Name</label>
+              <input
+                value={form.model}
+                onChange={e => setForm({ ...form, model: e.target.value })}
+                placeholder="e.g., gpt-4o, llama3.1:8b, claude-3-5-sonnet"
+                style={{ width: "100%", padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", boxSizing: "border-box" }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>API Key (optional)</label>
               <input
                 type="password"
                 value={form.apiKey}
                 onChange={e => setForm({ ...form, apiKey: e.target.value })}
-                placeholder="sk-..."
+                placeholder="sk-... (if required)"
                 style={{ width: "100%", padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", boxSizing: "border-box" }}
               />
             </div>
-          )}
+          </div>
 
-          {/* Base URL (for self-hosted) */}
-          {(form.provider === "openai-compatible" || form.provider === "ollama") && (
-            <div style={{ marginBottom: "1rem" }}>
-              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>
-                Base URL {form.provider === "ollama" ? "(optional)" : "*"}
-              </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>Temperature ({form.temperature})</label>
               <input
-                value={form.baseUrl}
-                onChange={e => setForm({ ...form, baseUrl: e.target.value })}
-                placeholder={form.provider === "ollama" ? "http://localhost:11434" : "http://localhost:11434/v1"}
+                type="range" min="0" max="1" step="0.1" value={form.temperature}
+                onChange={e => setForm({ ...form, temperature: parseFloat(e.target.value) })}
+                style={{ width: "100%", accentColor: "#3b82f6" }}
+              />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>Max Tokens</label>
+              <input
+                type="number" value={form.maxTokens}
+                onChange={e => setForm({ ...form, maxTokens: parseInt(e.target.value) || 4000 })}
                 style={{ width: "100%", padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white", boxSizing: "border-box" }}
               />
             </div>
-          )}
+          </div>
 
-          {/* Test Button */}
-          <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          {/* Test & Save */}
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "1rem" }}>
             <button
-              type="button"
-              onClick={handleTest}
-              disabled={testing !== null}
+              type="button" onClick={handleTest} disabled={testing}
               style={{ padding: "8px 16px", background: testing ? "#6b7280" : "#f59e0b", border: "none", color: "white", borderRadius: "4px", cursor: testing ? "wait" : "pointer", fontWeight: "bold" }}
             >
               {testing ? "Testing..." : "⚡ Test Connection"}
             </button>
             {testResult && (
               <span style={{ fontSize: "0.85rem", color: testResult.success ? "#22c55e" : "#ef4444" }}>
-                {testResult.success ? `✅ Connected (${testResult.latency}ms)` : "❌ Connection failed"}
+                {testResult.success ? `✅ Connected in ${testResult.latency}ms` : `❌ ${testResult.error || "Connection failed"}`}
               </span>
             )}
           </div>
 
-          {/* Temperature & Max Tokens */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-            <div>
-              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>
-                Temperature ({form.temperature})
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={form.temperature}
-                onChange={e => setForm({ ...form, temperature: parseFloat(e.target.value) })}
-                style={{ width: "100%", accentColor: "#3b82f6" }}
-              />
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "#6b7280" }}>
-                <span>Precise (0.0)</span>
-                <span>Creative (1.0)</span>
-              </div>
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "4px" }}>Max Tokens</label>
-              <input
-                type="number"
-                value={form.maxTokens}
-                onChange={e => setForm({ ...form, maxTokens: parseInt(e.target.value) || 4000 })}
-                style={{ width: "100%", padding: "8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "4px", color: "white" }}
-              />
-            </div>
-          </div>
-
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#e5e7eb", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={e => setForm({ ...form, isActive: e.target.checked })}
-                style={{ accentColor: "#22c55e" }}
-              />
-              Activate immediately
-            </label>
-          </div>
-
-          <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
             <button type="submit" style={{ padding: "10px 24px", background: "#22c55e", border: "none", color: "white", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>
               Save Provider
             </button>
@@ -351,59 +270,45 @@ export default function LLMConfigPage() {
         </form>
       )}
 
-      {/* Provider List */}
+      {/* Saved Providers */}
+      <h3 style={{ fontSize: "0.95rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "0.75rem" }}>
+        Extension Providers ({providers.length})
+      </h3>
+
       {providers.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "3rem", color: "#6b7280" }}>
-          No AI brains configured. Add your first provider to enable autonomous decision-making.
+        <div style={{ textAlign: "center", padding: "2rem", color: "#6b7280" }}>
+          No extension providers configured. Add one for fallback or specialized reasoning.
         </div>
       ) : (
         <div style={{ display: "grid", gap: "0.75rem" }}>
-          {providers.map(p => (
-            <div
-              key={p.id}
-              style={{
-                background: "#1f2937",
-                padding: "1rem 1.25rem",
-                borderRadius: "8px",
+          {providers.map(p => {
+            const opt = PROVIDER_OPTIONS.find(o => o.value === p.provider);
+            return (
+              <div key={p.id} style={{
+                background: "#1f2937", padding: "1rem 1.25rem", borderRadius: "8px",
                 border: p.isActive ? "1px solid #22c55e" : "1px solid #374151",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "4px" }}>
-                  <span style={{ fontSize: "1.1rem" }}>
-                    {PROVIDER_OPTIONS.find(o => o.value === p.provider)?.icon || "🤖"}
-                  </span>
-                  <strong style={{ fontSize: "0.95rem", color: "#e5e7eb" }}>{p.name}</strong>
-                  {p.isActive && (
-                    <span style={{ padding: "2px 8px", background: "#052e16", color: "#22c55e", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>ACTIVE</span>
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "4px" }}>
+                    <span style={{ fontSize: "1.1rem" }}>{opt?.icon || "🤖"}</span>
+                    <strong style={{ fontSize: "0.95rem", color: "#e5e7eb" }}>{p.name}</strong>
+                    {p.isActive && <span style={{ padding: "2px 8px", background: "#052e16", color: "#22c55e", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>ACTIVE</span>}
+                  </div>
+                  <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
+                    {p.provider} • {p.model} • T={p.temperature} • {p.maxTokens} tokens
+                    {p.baseUrl && ` • ${p.baseUrl}`}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  {!p.isActive && (
+                    <button onClick={() => handleToggleActive(p.id)} style={{ padding: "4px 12px", background: "#1e3a5f", border: "none", color: "#60a5fa", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Activate</button>
                   )}
-                </div>
-                <div style={{ fontSize: "0.8rem", color: "#9ca3af" }}>
-                  {p.provider} • {p.model} • T={p.temperature} • Max={p.maxTokens} tokens
-                  {p.baseUrl && ` • ${p.baseUrl}`}
+                  <button onClick={() => handleDelete(p.id)} style={{ padding: "4px 12px", background: "#450a0a", border: "none", color: "#f87171", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Delete</button>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                {!p.isActive && (
-                  <button
-                    onClick={() => handleToggleActive(p.id, p.isActive)}
-                    style={{ padding: "4px 12px", background: "#1e3a5f", border: "none", color: "#60a5fa", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}
-                  >
-                    Activate
-                  </button>
-                )}
-                <button
-                  onClick={() => handleDelete(p.id)}
-                  style={{ padding: "4px 12px", background: "#450a0a", border: "none", color: "#f87171", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
