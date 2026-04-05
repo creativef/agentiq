@@ -1,7 +1,8 @@
 import { db } from "../db/client";
-import { agents, agentSkills, skills, tasks, agentLogs, companies, projects } from "../db/schema";
+import { agents, agentSkills, skills, tasks, agentLogs, companies, projects, companyBriefs } from "../db/schema";
 import { sql } from "drizzle-orm";
 import type { CEOContext, AgentCapability, TaskRequirement, InProgressTask, BlockedTask } from "./types";
+import { logAgentActivity } from "../utils/agentLogger";
 
 export async function buildCEOContext(companyId: string): Promise<CEOContext> {
   // 1. Company info

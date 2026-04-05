@@ -151,6 +151,26 @@ export const agentLogs = pgTable("agent_logs", {
 });
 
 // ============================================================
+// LLM PROVIDER CONFIGURATION — Founder-chosen intelligence brain
+// ============================================================
+
+export const llmProviders = pgTable("llm_providers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  name: text("name").notNull(),          // "Primary Brain", "Fallback Ollama"
+  provider: text("provider").notNull(),  // openai, anthropic, openai-compatible, ollama, local
+  model: text("model").notNull(),         // gpt-4o, claude-3-5-sonnet, llama3.1:8b
+  baseUrl: text("base_url"),              // For self-hosted: http://localhost:11434/v1
+  apiKey: text("api_key"),                // Encrypted (not required for local/ollama)
+  maxTokens: integer("max_tokens").default(4000),
+  temperature: real("temperature").default(0.3),
+  isActive: boolean("is_active").default(false),  // Only one active at a time
+  priority: integer("priority").default(0),       // For fallback chains
+  lastUsed: timestamp("last_used"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ============================================================
 // CEO ORCHESTRATOR — Autonomous Company Operating Layer
 // ============================================================
 

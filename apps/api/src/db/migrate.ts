@@ -334,7 +334,30 @@ async function main() {
   console.log("  [OK] files");
 
 
+
+  // LLM Providers Table
+  console.log("\nCreating llm_providers table...");
+  await sql.unsafe(`
+    CREATE TABLE IF NOT EXISTS llm_providers (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      base_url TEXT,
+      api_key TEXT,
+      max_tokens INT DEFAULT 4000,
+      temperature FLOAT DEFAULT 0.3,
+      is_active BOOLEAN DEFAULT false,
+      priority INT DEFAULT 0,
+      last_used TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("  [OK] llm_providers");
+
   // Company Briefs Table
+
   console.log("\nCreating company_briefs table...");
   await sql.unsafe(`
     CREATE TABLE IF NOT EXISTS company_briefs (

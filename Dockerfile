@@ -15,4 +15,4 @@ COPY . .
 
 EXPOSE 3000 5173
 
-CMD ["sh", "-c", "pnpm install && pnpm -C apps/api exec tsx src/db/migrate.ts && (pnpm -C apps/api exec tsx src/server.ts & pnpm -C apps/web dev --host 0.0.0.0)"]
+CMD ["sh", "-c", "CI=true pnpm install && pnpm -C apps/api exec tsx src/db/migrate.ts && (pnpm -C apps/api exec tsx src/server.ts & pnpm -C apps/web dev --host 0.0.0.0)"]

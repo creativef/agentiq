@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db/client";
-import { agents, tasks, projects, companies } from "./db/schema";
-import { runCEOLoop } from "./engine/ceoOrchestrator";
+import { agents, tasks, projects } from "./db/schema";
+import { startCEOOrchestrator } from "./orchestrator";
 
 /**
  * Task Execution Engine
@@ -116,32 +116,18 @@ export async function execAgent(taskRow: any) {
  * Background scheduler — runs every 30s to check for scheduled tasks
  */
 export function startTaskScheduler() {
-  console.log("🤖 Task Scheduler: CEO Orchestrator + Task Execution loop started (30s interval)");
-  
+  // Start the full autonomous CEO orchestrator
+  // This runs the real decision loop: build context -> LLM reasoning -> route -> execute -> monitor -> report
+  startCEOOrchestrator({ tickMs: 30_000, reportHours: 24, enabled: true });
+
+  // Keep old scheduler for backwards-compatibility with scheduled tasks
   setInterval(async () => {
     try {
-      // --- CEO ORCHESTRATOR LOOP ---
-      // Find all active companies and run the CEO decision loop for each
-      const activeCompanies = await db.select({ id: companies.id, name: companies.name }).from(companies);
-      for (const company of activeCompanies) {
-        try {
-          const result = await runCEOLoop(company.id);
-          if (result.processed > 0) {
-            console.log(`[CEO: ${company.name}] Made ${result.processed} decisions:`, result.decisions.join('; '));
-          }
-        } catch (e) {
-          console.error(`[CEO: ${company.name}] Orchestrator error:`, e);
-        }
-      }
-
-      // --- TASK SCHEDULER ---
-      // Find scheduled tasks that are due and execute them
       const dueTasks = await db.select().from(tasks).where(
         sql`${tasks.execStatus} = 'scheduled' AND ${tasks.scheduledAt} <= NOW()`
       );
 
       for (const task of dueTasks) {
-        // If task requires approval, set to pending approval
         if (task.approverRole && task.approvalStatus !== "approved") {
           await db.update(tasks).set({
             approvalStatus: "pending",
@@ -149,15 +135,11 @@ export function startTaskScheduler() {
           continue;
         }
 
-        // Execute the task
-        await db.update(tasks).set({
-          execStatus: "executing",
-        }).where(sql`${tasks.id} = ${task.id}`);
-
+        await db.update(tasks).set({ execStatus: "executing" }).where(sql`${tasks.id} = ${task.id}`);
         await execAgent(task);
       }
     } catch (e) {
       console.error("Task scheduler error:", e);
     }
-  }, 30000); // Run every 30 seconds
+  }, 30000);
 }
