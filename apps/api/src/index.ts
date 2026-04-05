@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { sql } from "drizzle-orm";
+import { db } from "./db/client";
 import auth from "./routes/auth";
 import { dashboard } from "./routes/dashboard";
 import { agentsRouter } from "./routes/agents";

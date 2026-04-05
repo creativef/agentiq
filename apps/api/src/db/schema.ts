@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, integer, boolean, real } from "drizzle-orm/pg-core";
 
 // ============================================================
 // CORE TABLES
@@ -147,6 +147,26 @@ export const agentLogs = pgTable("agent_logs", {
   taskId: uuid("task_id").references(() => tasks.id),
   level: text("level").default("info"), // info, action, success, error
   message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  agentId: uuid("agent_id").references(() => agents.id),
+  userId: uuid("user_id").references(() => users.id),
+  content: text("content").notNull(),
+  role: text("role").notNull().default("user"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const files = pgTable("files", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  fileName: text("file_name").notNull(),
+  fileType: text("file_type"),
+  fileSize: integer("file_size"),
+  filePath: text("file_path").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -1,4 +1,5 @@
 // OpenClaw connector — requires only instance URL
+import crypto from "node:crypto";
 import type { ConnectorDef, NormalizedEvent, DiscoveredAgent, AutoConfigResult } from "./index";
 
 export const openclawConnector: ConnectorDef = {

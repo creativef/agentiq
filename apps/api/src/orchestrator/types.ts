@@ -1,5 +1,5 @@
 // ============================================================
-// CEO Orchestro types
+// CEO Orchestrator Types
 // ============================================================
 
 export interface AgentCapability {
@@ -31,14 +31,32 @@ export interface InProgressTask {
 
 export interface BlockedTask {
   id: string;
+  taskId: string;
   title: string;
   status: string;
+  retryCount: number;
+  lastError: string | null;
+}
+
+export interface CompanyBrief {
+  vision: string;
+  marketContext: string | null;
+  constraints: string | null;
+  priorities: string | null;
+}
+
+export interface CompanyInfo {
+  id: string;
+  name: string;
+  goal: string;
 }
 
 export interface CEOContext {
   companyId: string;
+  company: CompanyInfo;
   companyName: string;
   companyGoal: string;
+  brief: CompanyBrief | null;
   agents: AgentCapability[];
   pendingTasks: TaskRequirement[];
   inProgressTasks: InProgressTask[];

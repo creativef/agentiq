@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { companies, companyMembers, agents, tasks, projects, events } from "../db/schema";
+import { companies, companyMembers, agents, tasks, projects, events, agentSkills } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 
 const agentsRouter = new Hono();
@@ -107,23 +107,6 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
       } catch {
         // Skip invalid skill IDs
       }
-    }
-  }
-
-  return c.json({ agent: result[0] });
-  const skillMap: Record<string, string> = {
-    FOUNDER: "strategic_planning",
-    CEO: "strategic_planning",
-    MANAGER: "project_management",
-    DEVELOPER: "code_generation",
-    DEVELOPER: "code_generation",
-  };
-  if (body.skills && Array.isArray(body.skills)) {
-    for (const skillId of body.skills) {
-      await db.insert(agentSkills).values({
-        agentId: result[0].id,
-        skillId,
-      });
     }
   }
 

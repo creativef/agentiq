@@ -6,7 +6,7 @@
 // ============================================================
 
 import { createLLMProvider, type LLMProviderConfig, type LLMMessage } from "../llm/provider";
-import type { CEOContext, CEOAction } from "./types";
+import type { CEOContext, CEOAction, ActionTypeName } from "./types";
 
 // ---------- System Prompt ----------
 const CEO_SYSTEM_PROMPT = `You are the CEO of an autonomous company. Your sole purpose is to organize the team and get work done.
@@ -106,46 +106,41 @@ function parseLLMDecision(rawContent: string): Array<Record<string, any>> {
 // ---------- Map LLM Response to CEOAction ----------
 function mapToAction(decision: Record<string, any>): CEOAction | null {
   const action = decision.action?.toLowerCase() || "";
+  const reason = decision.reason || "LLM decision";
   
   if (action === "assign_task" && decision.taskId && decision.agentId) {
     return {
-      type: "assign_task",
-      payload: {
-        taskId: decision.taskId,
-        agentId: decision.agentId,
-        reason: decision.reason || "LLM-assigned",
-      },
+      type: "assign_task" as ActionTypeName,
+      payload: { taskId: decision.taskId, agentId: decision.agentId },
+      reason,
+      confidence: "high",
     };
   }
   
   if (action === "create_agent" && decision.role) {
     return {
-      type: "create_agent",
-      payload: {
-        role: decision.role,
-        skills: decision.skills || [],
-        reason: decision.reason || "LLM-determined need",
-      },
+      type: "create_agent" as ActionTypeName,
+      payload: { role: decision.role, skills: decision.skills || [] },
+      reason,
+      confidence: "medium",
     };
   }
   
   if (action === "escalate" && decision.taskId) {
     return {
-      type: "escalate_to_founders",
-      payload: {
-        taskId: decision.taskId,
-        reason: decision.reason || "Persistent failure",
-      },
+      type: "escalate_to_founders" as ActionTypeName,
+      payload: { taskId: decision.taskId },
+      reason,
+      confidence: "high",
     };
   }
   
   if (action === "retry" && decision.taskId) {
     return {
-      type: "retry_task",
-      payload: {
-        taskId: decision.taskId,
-        reason: decision.reason || "Retrying with new context",
-      },
+      type: "retry_task" as ActionTypeName,
+      payload: { taskId: decision.taskId },
+      reason,
+      confidence: "medium",
     };
   }
 

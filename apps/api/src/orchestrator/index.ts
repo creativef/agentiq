@@ -4,7 +4,8 @@
 // ============================================================
 
 import { db } from "../db/client";
-import { companies, llmProviders, sql } from "../db/schema";
+import { companies, llmProviders } from "../db/schema";
+import { sql } from "drizzle-orm";
 import { buildCEOContext } from "./context-builder";
 import { monitorTasks } from "./task-monitor";
 import { routeTasks } from "./task-router";
