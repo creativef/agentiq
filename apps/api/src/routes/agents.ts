@@ -141,7 +141,19 @@ agentsRouter.put("/agents/:agentId", async (c) => {
     budgetLimit: body.budgetLimit,
     heartbeatInterval: body.heartbeatInterval,
     reportsTo: body.reportsTo !== undefined ? body.reportsTo : undefined,
+    // Position for draggable org chart tiles
+    xPos: body.xPos !== undefined ? body.xPos : undefined,
+    yPos: body.yPos !== undefined ? body.yPos : undefined,
   }).where(sql`${agents.id} = ${agentId}`);
+
+  // Additional managers (for CEO reporting to multiple Founders)
+  if (body.altReportsTo !== undefined) {
+    // raw SQL for array assignment
+    const arr = body.altReportsTo.length > 0
+      ? `ARRAY[${body.altReportsTo.map((id: string) => `'${id}'`).join(',')}]::uuid[]`
+      : `'{}'::uuid[]`;
+    await db.execute(sql`update agents set alt_reports_to = ${sql.raw(arr)} where id = ${agentId}`);
+  }
 
   return c.json({ ok: true });
 });
@@ -188,6 +200,8 @@ agentsRouter.get("/companies/:companyId/tree", async (c) => {
       role: agents.role,
       status: agents.status,
       reportsTo: agents.reportsTo,
+      xPos: agents.xPos,
+      yPos: agents.yPos,
     })
     .from(agents)
     .where(sql`${agents.companyId} = ${companyId}`);
