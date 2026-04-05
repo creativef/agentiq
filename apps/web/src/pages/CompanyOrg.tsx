@@ -7,144 +7,194 @@ interface AgentNode {
   role: string;
   status: string;
   reportsTo: string | null;
-  xPos: number | null;
-  yPos: number | null;
   children: AgentNode[];
 }
 
-const CARD_W = 200;
-const CARD_H = 110;
-const ROLE_COLORS: Record<string, { border: string; bg: string; text: string; glow: string }> = {
-  FOUNDER: { border: "#f59e0b", bg: "rgba(69, 26, 3, 0.95)", text: "#fbbf24", glow: "rgba(245, 158, 11, 0.3)" },
-  CEO: { border: "#3b82f6", bg: "rgba(30, 58, 95, 0.95)", text: "#60a5fa", glow: "rgba(59, 130, 246, 0.3)" },
-  MANAGER: { border: "#a855f7", bg: "rgba(46, 16, 101, 0.95)", text: "#c084fc", glow: "rgba(168, 85, 247, 0.3)" },
-  AGENT: { border: "#374151", bg: "rgba(31, 41, 55, 0.95)", text: "#9ca3af", glow: "transparent" },
-};
+interface Pos { x: number; y: number }
 
-const roleIcon = (r: string) => {
-  if (r === "FOUNDER") return "🚀";
-  if (r === "CEO") return "👔";
-  if (r === "MANAGER") return "📋";
-  return "🤖";
+const CARD_W = 210;
+const CARD_H = 120;
+const H_GAP = 30;
+const V_GAP = 80;
+
+const ICONS: Record<string, string> = { FOUNDER: "🚀", CEO: "👔", MANAGER: "📋" };
+const ROLE_COLORS: Record<string, { border: string; bg: string; text: string; glow: string }> = {
+  FOUNDER: { border: "#f59e0b", bg: "rgba(69, 26, 3, 0.95)", text: "#fbbf24", glow: "rgba(245, 158, 11, 0.35)" },
+  CEO: { border: "#3b82f6", bg: "rgba(30, 58, 95, 0.95)", text: "#60a5fa", glow: "rgba(59, 130, 246, 0.35)" },
+  MANAGER: { border: "#a855f7", bg: "rgba(46, 16, 101, 0.95)", text: "#c084fc", glow: "rgba(168, 85, 247, 0.35)" },
 };
 
 export default function CompanyOrg() {
   const { company } = useAuth();
   const [tree, setTree] = useState<AgentNode[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
-  const svgRef = useRef<HTMLDivElement>(null);
+  const [positions, setPositions] = useState<Record<string, Pos>>({});
+  const [dragNode, setDragNode] = useState<string | null>(null);
+  const dragOff = useRef<Pos>({ x: 0, y: 0 });
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [isPanning, setIsPanning] = useState(false);
+  const panOrigin = useRef<Pos>({ x: 0, y: 0 });
 
-  // ─── Fetch tree ───
+  // Fetch
   useEffect(() => {
     if (!company) return;
     fetch(`/api/companies/${company.id}/tree`, { credentials: "include" })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setTree(d?.tree || []))
+      .then(d => {
+        const nodes: AgentNode[] = d?.tree || [];
+        setTree(nodes);
+        // Compute initial positions
+        const flat = flattenTree(nodes);
+        const hasSaved = flat.some((n: any) => n.xPos != null && n.yPos != null);
+        if (hasSaved) {
+          const saved: Record<string, Pos> = {};
+          flat.forEach((n: any) => {
+            if (n.xPos != null && n.yPos != null) saved[n.id] = { x: n.xPos, y: n.yPos };
+          });
+          autoArrangeRemaining(nodes, saved);
+          setPositions(saved);
+        } else {
+          setPositions(calculateAutoLayout(nodes));
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [company]);
 
-  // ─── Flatten for rendering positions ───
-  const allNodes = useMemo(() => {
-    const flat: AgentNode[] = [];
-    const walk = (nodes: AgentNode[]) => { for (const n of nodes) { flat.push(n); walk(n.children); } };
-    walk(tree);
-    return flat;
+  // Flatten tree + add all props to a Record for quick lookup
+  const allAgents = useMemo(() => {
+    const m: Record<string, AgentNode> = {};
+    (function walk(nodes: AgentNode[]) {
+      for (const n of nodes) { m[n.id] = n; walk(n.children); }
+    })(tree);
+    return m;
   }, [tree]);
 
-  // ─── Drag handling ───
-  const handleDragStart = useCallback((e: React.MouseEvent, node: AgentNode) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const currentX = node.xPos ?? 0;
-    const currentY = node.yPos ?? 0;
-    setDragging({ id: node.id, offsetX: e.clientX - currentX, offsetY: e.clientY - currentY });
+  // Calculate auto-layout (pure, no mutation)
+  const calculateAutoLayout = useCallback((nodes: AgentNode[]): Record<string, Pos> => {
+    const result: Record<string, Pos> = {};
+    
+    function subtreeWidth(ns: AgentNode[]): number {
+      if (ns.length === 0) return 0;
+      let total = 0;
+      for (let i = 0; i < ns.length; i++) {
+        total += Math.max(CARD_W, subtreeWidth(ns[i].children));
+        if (i < ns.length - 1) total += H_GAP;
+      }
+      return total;
+    }
+
+    function layout(ns: AgentNode[], startX: number, y: number) {
+      const totalW = subtreeWidth(ns);
+      let x = startX;
+      for (const n of ns) {
+        const w = Math.max(CARD_W, subtreeWidth(n.children));
+        const cx = x + w / 2 - CARD_W / 2;
+        result[n.id] = { x: cx, y };
+        if (n.children.length > 0) {
+          layout(n.children, x, y + CARD_H + V_GAP);
+        }
+        x += w + H_GAP;
+      }
+    }
+
+    layout(nodes, 0, 40);
+    
+    // Shift everything to be centered around 0
+    const xs = Object.values(result).map(p => p.x);
+    const ys = Object.values(result).map(p => p.y);
+    if (xs.length === 0) return result;
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    const shiftX = -minX + 100;
+    const shiftY = -minY + 60;
+    
+    for (const id in result) {
+      result[id].x += shiftX;
+      result[id].y += shiftY;
+    }
+    return result;
   }, []);
 
-  const handleDragMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging) return;
-    const newX = e.clientX - dragging.offsetX;
-    const newY = e.clientY - dragging.offsetY;
-    setTree(prev =>
-      updateNodePos(prev, dragging.id, newX, newY)
-    );
-  }, [dragging]);
-
-  const handleDragEnd = useCallback(async () => {
-    if (!dragging) return;
-    const node = findNode(tree, dragging.id);
-    if (node && company) {
-      try {
-        await fetch(`/api/agents/${dragging.id}`, {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ xPos: Math.round(node.xPos ?? 0), yPos: Math.round(node.yPos ?? 0) }),
-        });
-      } catch (e) { console.error("Failed to save position:", e); }
+  // Auto-arrange any nodes without positions
+  const autoArrangeRemaining = useCallback((nodes: AgentNode[], posMap: Record<string, Pos>) => {
+    const layout = calculateAutoLayout(nodes);
+    for (const id in layout) {
+      if (!posMap[id]) posMap[id] = layout[id];
     }
-    setDragging(null);
-  }, [dragging, tree, company]);
+  }, [calculateAutoLayout]);
 
-  // ─── Zoom / Pan ───
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [panning, setPanning] = useState(false);
-  const panStart = useRef({ x: 0, y: 0 });
+  // ─── Drag handlers ───
+  const onCardDown = useCallback((e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    dragOff.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    setDragNode(id);
+  }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  const onCanvasMove = useCallback((e: React.MouseEvent) => {
+    if (dragNode && canvasRef.current) {
+      const pos = positions[dragNode];
+      if (!pos) return;
+      const newX = e.clientX - dragOff.current.x - canvasRef.current.getBoundingClientRect().left;
+      const newY = e.clientY - dragOff.current.y - canvasRef.current.getBoundingClientRect().top;
+      setPositions(prev => ({ ...prev, [dragNode]: { x: newX, y: newY } }));
+    } else if (isPanning) {
+      setPan({ x: e.clientX - panOrigin.current.x, y: e.clientY - panOrigin.current.y });
+    }
+  }, [dragNode, positions, isPanning]);
+
+  const onCanvasUp = useCallback(async () => {
+    if (dragNode && company) {
+      const pos = positions[dragNode];
+      if (pos) {
+        try {
+          await fetch(`/api/agents/${dragNode}`, {
+            method: "PUT",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ xPos: Math.round(pos.x), yPos: Math.round(pos.y) }),
+          });
+        } catch (e) { console.error(e); }
+      }
+    }
+    setDragNode(null);
+    setIsPanning(false);
+  }, [dragNode, positions, company]);
+
+  const onCanvasDown = useCallback((e: React.MouseEvent) => {
+    if (dragNode) return;
+    setIsPanning(true);
+    panOrigin.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+  }, [dragNode, pan]);
+
+  const onWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
     setZoom(z => Math.max(0.25, Math.min(3, z + (e.deltaY > 0 ? -0.08 : 0.08))));
   }, []);
 
-  const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
-    if (dragging) return;
-    setPanning(true);
-    panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-  }, [dragging, pan]);
-
-  const handleCanvasMouseMove = useCallback((e: React.MouseEvent) => {
-    if (panning) setPan({ x: e.clientX - panStart.current.x, y: e.clientY - panStart.current.y });
-    if (dragging) handleDragMove(e);
-  }, [panning, dragging, handleDragMove]);
-
-  const handleCanvasMouseUp = useCallback(() => { setPanning(false); handleDragEnd(); }, [handleDragEnd]);
-
-  // ─── Auto-center on load ───
+  // Auto-center on mount
   useEffect(() => {
-    if (allNodes.length === 0) return;
-    const hasPositions = allNodes.some(n => n.xPos !== null && n.yPos !== null);
-    if (!hasPositions && tree.length > 0) {
-      // Auto-layout first time
-      const centerX = window.innerWidth / 2 - CARD_W / 2;
-      let yOffset = 60;
-      const setAutoLayout = (nodes: AgentNode[], depth: number, parentX: number) => {
-        let xOff = 0;
-        for (const n of nodes) {
-          const w = subtreeWidth(n);
-          const cx = parentX + w / 2;
-          n.xPos = (cx - CARD_W / 2) as number;
-          n.yPos = yOffset;
-          if (n.children.length > 0) {
-            const childY = yOffset + CARD_H + 60;
-            const oldY = yOffset;
-            yOffset = childY;
-            setAutoLayout(n.children, depth + 1, cx);
-            yOffset = oldY + CARD_H + 80;
-          }
-        }
-      };
-      setAutoLayout(tree, 0, 0);
-    }
-  }, [tree, allNodes]);
+    const posVals = Object.values(positions);
+    if (posVals.length === 0) return;
+    const cw = canvasRef.current?.clientWidth || 1000;
+    const ch = canvasRef.current?.clientHeight || 600;
+    const xs = posVals.map(p => p.x);
+    const ys = posVals.map(p => p.y);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    const maxX = Math.max(...xs) + CARD_W;
+    const maxY = Math.max(...ys) + CARD_H;
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+    setPan({ x: cw / 2 - (contentW / 2 + minX), y: ch / 2 - (contentH / 2 + minY) - 50 });
+  }, [positions]);
 
   if (loading) return <div style={{ padding: "2rem", color: "#888" }}>Loading...</div>;
   if (!company) return <p style={{ padding: "2rem", color: "#888" }}>No company selected.</p>;
-
-  const hasPositions = allNodes.some(n => n.xPos !== null);
-  const maxX = hasPositions ? Math.max(...allNodes.map(n => (n.xPos ?? 0) + CARD_W)) : 900;
-  const maxY = hasPositions ? Math.max(...allNodes.map(n => (n.yPos ?? 0) + CARD_H)) : 600;
 
   return (
     <div style={{ padding: "1.5rem", height: "calc(100vh - 80px)", display: "flex", flexDirection: "column" }}>
@@ -152,108 +202,93 @@ export default function CompanyOrg() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <div>
           <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", margin: 0 }}>Organization Chart</h1>
-          <p style={{ fontSize: "0.8rem", color: "#6b7280", margin: "4px 0 0" }}>
-            Drag tiles to rearrange. Scroll to zoom.
-          </p>
+          <p style={{ fontSize: "0.8rem", color: "#6b7280", margin: "4px 0 0" }}>Drag tiles to rearrage. Scroll to zoom.</p>
         </div>
         <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
           <button onClick={() => setZoom(z => Math.max(0.25, z - 0.2))} style={btnStyle}>−</button>
           <span style={{ padding: "6px 10px", background: "#1f2937", borderRadius: "4px", color: "#e5e7eb", fontSize: "0.85rem", minWidth: "50px", textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoom(z => Math.min(3, z + 0.2))} style={btnStyle}>+</button>
-          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} style={{ ...btnStyle, marginLeft: "4px", fontSize: "0.7rem", color: "#9ca3af" }}>Reset</button>
+          <button onClick={() => { setZoom(1); setPan({ x: 50, y: 50 }); }} style={{ ...btnStyle, marginLeft: "6px", fontSize: "0.7rem", color: "#9ca3af" }}>Reset</button>
         </div>
       </div>
 
       {tree.length === 0 ? (
         <div style={{ textAlign: "center", padding: "3rem", color: "#6b7280" }}>
-          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🏢</div>
-          <p>No agents yet.</p>
+          <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🏢</div><p>No agents yet.</p>
         </div>
       ) : (
         <div
-          ref={svgRef}
+          ref={canvasRef}
           style={{
             flex: 1, overflow: "hidden", background: "#0f172a", borderRadius: "12px",
-            border: "1px solid #1e293b", cursor: dragging ? "grabbing" : panning ? "grabbing" : "grab",
+            border: "1px solid #1e293b", cursor: dragNode ? "grabbing" : isPanning ? "grabbing" : "grab",
             position: "relative",
           }}
-          onWheel={handleWheel}
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleCanvasMouseMove}
-          onMouseUp={handleCanvasMouseUp}
-          onMouseLeave={handleCanvasMouseUp}
+          onMouseDown={onCanvasDown}
+          onMouseMove={onCanvasMove}
+          onMouseUp={onCanvasUp}
+          onMouseLeave={onCanvasUp}
+          onWheel={onWheel}
         >
-          <div style={{ position: "absolute", top: pan.y, left: pan.x, pointerEvents: "none" }}>
-            {/* SVG Connector Lines */}
-            <svg
-              style={{
-                position: "absolute", top: 0, left: 0,
-                width: maxX + 600, height: maxY + 400, overflow: "visible", pointerEvents: "none",
-              }}
-            >
-              {allNodes.map(node => {
-                const parentPos = node.reportsTo ? allNodes.find(n => n.id === node.reportsTo) : null;
-                if (!parentPos || node.xPos === null || node.yPos === null) return null;
-                const x1 = (parentPos.xPos ?? 0) + CARD_W / 2;
-                const y1 = (parentPos.yPos ?? 0) + CARD_H;
-                const x2 = node.xPos + CARD_W / 2;
-                const y2 = node.yPos;
-                const my = y2 - 35;
+          <div style={{
+            position: "absolute", top: pan.y, left: pan.x,
+            transform: `scale(${zoom})`, transformOrigin: "0 0",
+            width: "100%", height: "100%", pointerEvents: "none",
+          }}>
+            {/* Connector Lines */}
+            <svg style={{ position: "absolute", top: 0, left: 0, width: "5000px", height: "5000px", overflow: "visible", pointerEvents: "none" }}>
+              {Object.entries(allAgents).map(([id, node]) => {
+                if (!node.reportsTo) return null;
+                const parentPos = positions[node.reportsTo];
+                const childPos = positions[id];
+                if (!parentPos || !childPos) return null;
+                const x1 = parentPos.x + CARD_W / 2;
+                const y1 = parentPos.y + CARD_H;
+                const x2 = childPos.x + CARD_W / 2;
+                const y2 = childPos.y;
+                const midY = y2 - V_GAP / 2;
                 return (
-                  <g key={node.id}>
-                    <path d={`M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`}
-                      fill="none" stroke="#334155" strokeWidth={2} />
-                    <circle cx={x2} cy={y2 - 4} r={3} fill="#334155" />
-                  </g>
+                  <path key={id} d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
+                    fill="none" stroke="#334155" strokeWidth={2} />
                 );
               })}
             </svg>
 
-            {/* Agent Cards — rendered in role order so Founders paint first */}
-            {[...allNodes].sort((a, b) => {
-              const order = { FOUNDER: 0, CEO: 1, MANAGER: 2, AGENT: 3 };
-              return (order[a.role as keyof typeof order] ?? 99) - (order[b.role as keyof typeof order] ?? 99);
-            }).map(node => {
-              const rc = ROLE_COLORS[node.role] || ROLE_COLORS.AGENT;
-              const x = node.xPos ?? 200;
-              const y = node.yPos ?? 200;
+            {/* Agent Cards */}
+            {Object.entries(positions).map(([id, pos]) => {
+              const node = allAgents[id];
+              if (!node) return null;
+              const rc = ROLE_COLORS[node.role] || ROLE_COLORS.MANAGER;
+              const isDragging = dragNode === id;
               return (
                 <div
-                  key={node.id}
-                  onMouseDown={e => handleDragStart(e, node)}
+                  key={id}
+                  onMouseDown={e => onCardDown(e, id)}
                   style={{
-                    position: "absolute", left: x, top: y,
+                    position: "absolute", left: pos.x, top: pos.y,
                     width: CARD_W, minHeight: CARD_H,
-                    background: rc.bg, borderRadius: "14px",
-                    border: `2px solid ${rc.border}`,
-                    boxShadow: `0 4px 24px ${rc.glow}, 0 0 0 1px ${rc.border}40`,
-                    padding: "12px 14px",
-                    cursor: "grab",
-                    userSelect: "none",
-                    pointerEvents: "auto",
-                    backdropFilter: "blur(8px)",
-                    transition: dragging?.id === node.id ? "none" : "box-shadow 0.3s",
+                    background: rc.bg, borderRadius: "14px", border: `2px solid ${rc.border}`,
+                    boxShadow: isDragging ? `0 8px 32px ${rc.glow}, 0 0 0 2px ${rc.border}` : `0 4px 20px ${rc.glow}`,
+                    padding: "14px 16px",
+                    cursor: "grab", userSelect: "none", pointerEvents: "auto",
+                    zIndex: isDragging ? 1000 : 1,
+                    transition: isDragging ? "none" : "box-shadow 0.25s",
                   }}
                 >
-                  {/* Top bar */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                     <span style={{ fontSize: "0.65rem", fontWeight: "bold", color: rc.text, letterSpacing: "0.05em" }}>{node.role}</span>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: node.status === "running" ? "#22c55e" : "#6b7280" }} />
+                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: node.status === "running" || node.status === "idle" ? "#22c55e" : "#6b7280" }} />
                   </div>
-
-                  {/* Icon + Name */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                    <span style={{ fontSize: "1.5rem" }}>{roleIcon(node.role)}</span>
-                    <div style={{ flex: 1, overflow: "hidden" }}>
-                      <div style={{ fontWeight: "bold", fontSize: "0.9rem", color: "#f1f5f9", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{node.name}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "1.6rem" }}>{ICONS[node.role] || "🤖"}</span>
+                    <div style={{ overflow: "hidden" }}>
+                      <div style={{ fontWeight: "bold", fontSize: "0.95rem", color: "#f1f5f9", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{node.name}</div>
                       <div style={{ fontSize: "0.7rem", color: "#64748b", textTransform: "capitalize" }}>{node.status.replace("_", " ")}</div>
                     </div>
                   </div>
-
-                  {/* Reports-to line */}
                   {node.reportsTo && (
-                    <div style={{ fontSize: "0.65rem", color: "#475569", borderTop: "1px solid #1e293b", paddingTop: "4px", marginTop: "4px" }}>
-                      ↓ Reports to
+                    <div style={{ fontSize: "0.65rem", color: "#475569", borderTop: "1px solid #1e293b", paddingTop: "4px" }}>
+                      ↓ Reports to: {allAgents[node.reportsTo]?.name || "Unknown"}
                     </div>
                   )}
                 </div>
@@ -266,20 +301,12 @@ export default function CompanyOrg() {
   );
 }
 
-// ─── Helpers ───
+function flattenTree(nodes: AgentNode[]): AgentNode[] {
+  const r: AgentNode[] = [];
+  (function walk(ns: AgentNode[]) {
+    for (const n of ns) { r.push(n); walk(n.children); }
+  })(nodes);
+  return r;
+}
+
 const btnStyle = { padding: "6px 12px", background: "#1e293b", border: "1px solid #334155", color: "white", borderRadius: "6px", cursor: "pointer", fontSize: "1rem", lineHeight: 1 };
-
-function findNode(nodes: AgentNode[], id: string): AgentNode | null {
-  for (const n of nodes) { if (n.id === id) return n; const f = findNode(n.children, id); if (f) return f; }
-  return null;
-}
-
-function updateNodePos(nodes: AgentNode[], id: string, x: number, y: number): AgentNode[] {
-  return nodes.map(n => n.id === id ? { ...n, xPos: Math.max(0, Math.round(x)), yPos: Math.max(0, Math.round(y)) } : n);
-}
-
-function subtreeWidth(node: AgentNode): number {
-  if (node.children.length === 0) return CARD_W + 40;
-  const childWidth = node.children.reduce((sum, c) => sum + subtreeWidth(c) + 30, -30);
-  return Math.max(CARD_W + 40, childWidth);
-}
