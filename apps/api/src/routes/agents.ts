@@ -57,6 +57,7 @@ agentsRouter.get("/companies/:companyId/agents", async (c) => {
       heartbeatInterval: agents.heartbeatInterval,
       platform: agents.platform,
       reportsTo: agents.reportsTo,
+      altReportsTo: agents.altReportsTo,
     })
     .from(agents)
     .where(sql`${agents.companyId} = ${companyId}`);
@@ -94,6 +95,7 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
     budgetLimit: body.budgetLimit || null,
     heartbeatInterval: body.heartbeatInterval || 3600,
     reportsTo: body.reportsTo || null,
+    altReportsTo: body.altReportsTo || null,
   }).returning();
 
   // Assign skills if provided

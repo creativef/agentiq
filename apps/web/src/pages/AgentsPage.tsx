@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, useMemo, FormEvent } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import ActivityLogView from "../components/ActivityLogView";
 
@@ -15,6 +15,7 @@ interface AgentItem {
   platform: string | null;
   projectId: string | null;
   reportsTo: string | null;
+  altReportsTo: string[] | null;
 }
 
 const statusColors: Record<string, string> = {
@@ -56,12 +57,18 @@ export default function AgentsPage() {
       : `/api/companies/${company.id}/agents`;
     fetch(url, { credentials: "include" })
       .then(r => r.json())
-      .then(d => setAgents(d.agents || []))
+      .then(d => setAgents(d?.agents || []))
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { fetchAgents(); }, [company, project]);
+
+  // Auto-load all founder IDs (for CEO auto-reports-to)
+  const founderIds = useMemo(() =>
+    agents.filter(a => a.role === "FOUNDER").map(a => a.id),
+    [agents]
+  );
 
   // Load skills library
   useEffect(() => {
@@ -74,18 +81,26 @@ export default function AgentsPage() {
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!company) return;
-      const res = await fetch(`/api/companies/${company.id}/agents`, {
+
+    const body: Record<string, any> = {
+      name: form.name,
+      role: form.role,
+      budgetLimit: form.budgetLimit ? Number(form.budgetLimit) : null,
+      heartbeatInterval: Number(form.heartbeatInterval),
+      skillIds: form.skillIds,
+      reportsTo: form.reportsTo || null,
+    };
+
+    // CEO automatically reports to all founders
+    if (form.role === "CEO" && founderIds.length > 0) {
+      body.altReportsTo = founderIds;
+    }
+
+    const res = await fetch(`/api/companies/${company.id}/agents`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.name,
-        role: form.role,
-        budgetLimit: form.budgetLimit ? Number(form.budgetLimit) : null,
-        heartbeatInterval: Number(form.heartbeatInterval),
-        skillIds: form.skillIds,
-        reportsTo: form.reportsTo || null,
-      }),
+      body: JSON.stringify(body),
     });
     if (res.ok) {
       setForm({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [], reportsTo: "" });
@@ -113,17 +128,25 @@ export default function AgentsPage() {
 
   const handleSaveEdit = async () => {
     if (!editing) return;
+
+    const body: Record<string, any> = {
+      name: editForm.name,
+      status: editForm.status || undefined,
+      budgetLimit: editForm.budgetLimit ? Number(editForm.budgetLimit) : null,
+      heartbeatInterval: Number(editForm.heartbeatInterval),
+      reportsTo: editForm.reportsTo || null,
+    };
+
+    // If editing a CEO, auto-set altReportsTo to all founders
+    if (editing.role === "CEO" && founderIds.length > 0) {
+      body.altReportsTo = founderIds;
+    }
+
     await fetch(`/api/agents/${editing.id}`, {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: editForm.name,
-        status: editForm.status || undefined,
-        budgetLimit: editForm.budgetLimit ? Number(editForm.budgetLimit) : null,
-        heartbeatInterval: Number(editForm.heartbeatInterval),
-        reportsTo: editForm.reportsTo || null,
-      }),
+      body: JSON.stringify(body),
     });
     setEditing(null);
     fetchAgents();
