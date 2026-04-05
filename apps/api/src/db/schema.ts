@@ -211,55 +211,12 @@ export const companyBriefs = pgTable("company_briefs", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const ceoDecisions = pgTable("ceo_decisions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  companyId: uuid("company_id").notNull().references(() => companies.id),
-  agentId: uuid("agent_id").references(() => agents.id),
-  decision: text("decision").notNull(),
-  reasoning: text("reasoning"),
-  action: text("action").notNull(),
-  targetId: uuid("target_id"),
-  status: text("status").default("pending"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
 
-export const agentPerformance = pgTable("agent_performance", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  agentId: uuid("agent_id").notNull().references(() => agents.id),
-  taskId: uuid("task_id").references(() => tasks.id),
-  score: integer("score"),
-  outcome: text("outcome"),
-  notes: text("notes"),
-  flaggedByCeo: boolean("flagged_by_ceo").default(false),
-  createdAt: timestamp("created_at").defaultNow(),
-});
 
-export const bundleSkills = pgTable("bundle_skills", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  bundleId: uuid("bundle_id").notNull(),
-  skillId: uuid("skill_id").notNull(),
-  sortOrder: integer("sort_order").default(0),
-  isRequired: boolean("is_required").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-});
 
-export const agentBundles = pgTable("agent_bundles", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  agentId: uuid("agent_id").notNull(),
-  bundleId: uuid("bundle_id").notNull(),
-  assignedBy: text("assigned_by"),
-  status: text("status").default("active"), // active | superseded | removed
-  assignedAt: timestamp("assigned_at").defaultNow(),
-});
 
-export const skillBundles = pgTable("skill_bundles", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull().unique(),
-  role: text("role").notNull(),
-  description: text("description"),
-  icon: text("icon").default("📦"),
-  isSystem: boolean("is_system").default(false),
-  companyId: uuid("company_id"),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+
+
+
+
+

@@ -69,6 +69,12 @@ filesRouter.post("/files", async (c) => {
   const arrayBuffer = await fileData.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
+  // Security: 50MB file size limit
+  const MAX_SIZE = 50 * 1024 * 1024;
+  if (buffer.length > MAX_SIZE) {
+    return c.json({ error: "File too large (max 50MB)" }, 413);
+  }
+
   const fileName = fileData.name;
   const fileType = fileData.type || "application/octet-stream";
   const fileSize = buffer.length;
