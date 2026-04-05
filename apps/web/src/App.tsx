@@ -11,6 +11,7 @@ import CompanyBriefsPage from "./pages/CompanyBriefsPage";
 import LLMConfigPage from "./pages/LLMConfigPage";
 import CalendarMeetings from "./pages/CalendarMeetings";
 import ChatJournal from "./pages/ChatJournal";
+import JournalPage from "./pages/JournalPage";
 import FileHub from "./pages/FileHub";
 import CompanyOrg from "./pages/CompanyOrg";
 import CompanySettings from "./pages/CompanySettings";
@@ -54,6 +55,9 @@ const AuthedApp = () => (
     </Route>
     <Route path="chat" element={<DashboardLayout />}>
       <Route index element={<ChatJournal />} />
+    </Route>
+    <Route path="journal" element={<DashboardLayout />}>
+      <Route index element={<JournalPage />} />
     </Route>
     <Route path="org" element={<DashboardLayout />}>
       <Route index element={<CompanyOrg />} />
