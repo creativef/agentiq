@@ -166,28 +166,44 @@ export default function LLMConfigPage() {
     <div style={{ padding: "1.5rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", margin: 0 }}>AI Brain Configuration</h1>
+          <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", margin: 0 }}>CEO Intelligence</h1>
           <p style={{ fontSize: "0.85rem", color: "#9ca3af", margin: "4px 0 0" }}>
-            Configure the LLM provider your CEO uses for autonomous decision-making.
+            🟢 <strong>Hermes</strong> is your primary CEO brain. Add extension LLMs for specialized reasoning or fallback.
           </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
           style={{ padding: "8px 16px", background: "#3b82f6", border: "none", color: "white", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
         >
-          {showForm ? "Cancel" : "+ Add Brain"}
+          {showForm ? "Cancel" : "+ Add Extension"}
         </button>
       </div>
 
-      {/* Active Provider Banner */}
-      {providers.find(p => p.isActive) && (
-        <div style={{ padding: "0.75rem 1rem", background: "#052e16", border: "1px solid #22c55e", borderRadius: "8px", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={{ fontSize: "1.2rem" }}>🧠</span>
-          <span style={{ fontSize: "0.85rem", color: "#22c55e" }}>
-            Active: <strong>{providers.find(p => p.isActive)?.name}</strong> ({providers.find(p => p.isActive)?.model})
-          </span>
+      {/* Hermes Primary Brain Banner */}
+      <div style={{ background: "#1f2937", padding: "1.25rem", borderRadius: "8px", border: "1px solid #22c55e", marginBottom: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div style={{ fontSize: "2rem", width: "48px", height: "48px", background: "#052e16", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              ⚡
+            </div>
+            <div>
+              <strong style={{ fontSize: "1rem", color: "#e5e7eb" }}>Hermes Agent</strong>
+              <span style={{ marginLeft: "8px", padding: "2px 8px", background: "#052e16", color: "#22c55e", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>PRIMARY CEO</span>
+              <div style={{ fontSize: "0.8rem", color: "#9ca3af", marginTop: "2px" }}>
+                Your main autonomous orchestrator. Zero additional cost. Manages company operations and delegates to agents.
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
+
+      {/* Extension LLMs */}
+      <h3 style={{ fontSize: "0.95rem", fontWeight: "bold", color: "#e5e7eb", marginBottom: "0.75rem" }}>Extension LLMs <span style={{ fontWeight: "normal", color: "#6b7280", fontSize: "0.8rem" }}>(optional)</span></h3>
+      <p style={{ fontSize: "0.8rem", color: "#6b7280", marginBottom: "0.75rem" }}>
+        Add specialized or fallback LLMs for specific reasoning tasks, model comparison, or high-load scenarios.
+      </p>
+
+      {/* Provider List */}
 
       {showForm && (
         <form onSubmit={handleSubmit} style={{ background: "#1f2937", padding: "1.5rem", borderRadius: "8px", border: "1px solid #374151", marginBottom: "1.5rem" }}>
