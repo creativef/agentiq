@@ -73,7 +73,15 @@ async function main() {
         status TEXT NOT NULL DEFAULT 'todo',
         priority TEXT DEFAULT 'medium',
         created_at TIMESTAMP DEFAULT NOW(),
-        due_date TIMESTAMP
+        due_date TIMESTAMP,
+        exec_status TEXT DEFAULT 'idle',
+        scheduled_at TIMESTAMP,
+        approver_role TEXT,
+        approval_status TEXT,
+        result TEXT,
+        assigned_by TEXT,
+        x_pos INT,
+        y_pos INT
       )
     `],
     [`events`, `
