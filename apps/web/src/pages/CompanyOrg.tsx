@@ -130,7 +130,6 @@ export default function CompanyOrg() {
   // ─── Drag handlers ───
   const onCardDown = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    e.preventDefault();
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     dragOff.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     setDragNode(id);
@@ -172,10 +171,18 @@ export default function CompanyOrg() {
     panOrigin.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
   }, [dragNode, pan]);
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
+  // Wheel via native listener to avoid passive event issue
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     setZoom(z => Math.max(0.25, Math.min(3, z + (e.deltaY > 0 ? -0.08 : 0.08))));
   }, []);
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   // Auto-center on mount
   useEffect(() => {
@@ -254,7 +261,6 @@ export default function CompanyOrg() {
           onMouseMove={onCanvasMove}
           onMouseUp={onCanvasUp}
           onMouseLeave={onCanvasUp}
-          onWheel={onWheel}
         >
           <div style={{
             position: "absolute", top: pan.y, left: pan.x,
