@@ -146,13 +146,11 @@ agentsRouter.put("/agents/:agentId", async (c) => {
     yPos: body.yPos !== undefined ? body.yPos : undefined,
   }).where(sql`${agents.id} = ${agentId}`);
 
-  // Additional managers (for CEO reporting to multiple Founders)
+  // Save additional managers (for CEO reporting to multiple Founders)
   if (body.altReportsTo !== undefined) {
-    // raw SQL for array assignment
-    const arr = body.altReportsTo.length > 0
-      ? `ARRAY[${body.altReportsTo.map((id: string) => `'${id}'`).join(',')}]::uuid[]`
-      : `'{}'::uuid[]`;
-    await db.execute(sql`update agents set alt_reports_to = ${sql.raw(arr)} where id = ${agentId}`);
+    await db.update(agents).set({
+      altReportsTo: body.altReportsTo.length > 0 ? body.altReportsTo : null,
+    }).where(sql`${agents.id} = ${agentId}`);
   }
 
   return c.json({ ok: true });
@@ -192,7 +190,6 @@ agentsRouter.get("/companies/:companyId/tree", async (c) => {
     .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
     .limit(1);
   if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
-
   const allAgents = await db
     .select({
       id: agents.id,
@@ -200,23 +197,35 @@ agentsRouter.get("/companies/:companyId/tree", async (c) => {
       role: agents.role,
       status: agents.status,
       reportsTo: agents.reportsTo,
+      altReportsTo: agents.altReportsTo,
       xPos: agents.xPos,
       yPos: agents.yPos,
     })
     .from(agents)
     .where(sql`${agents.companyId} = ${companyId}`);
 
-  // Build tree: group by reportsTo
+  // Build tree: group by reportsTo AND altReportsTo
   const agentMap = new Map();
   const roots = [];
+  const altChildrenAdded = new Set();
 
   for (const a of allAgents) {
     agentMap.set(a.id, { ...a, children: [] });
   }
   for (const a of allAgents) {
     const node = agentMap.get(a.id);
+    // Primary parent
     if (a.reportsTo && agentMap.has(a.reportsTo)) {
       agentMap.get(a.reportsTo).children.push(node);
+    } else if (a.altReportsTo && a.altReportsTo.length > 0) {
+      // If altReportsTo exists but no primary, use first alt as primary for tree
+      const primaryAlt = a.altReportsTo[0];
+      if (agentMap.has(primaryAlt)) {
+        agentMap.get(primaryAlt).children.push(node);
+        altChildrenAdded.add(a.id);
+      } else {
+        roots.push(node);
+      }
     } else {
       roots.push(node);
     }

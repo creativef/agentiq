@@ -48,6 +48,9 @@ export const agents = pgTable("agents", {
   platform: text("platform"),
   externalId: text("external_id"),
   reportsTo: uuid("reports_to").references(() => agents.id),
+  altReportsTo: uuid("alt_reports_to").array(),  // For CEO → multiple founders
+  xPos: integer("x_pos"),  // Draggable org chart position
+  yPos: integer("y_pos"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

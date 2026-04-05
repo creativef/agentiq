@@ -7,6 +7,7 @@ interface AgentNode {
   role: string;
   status: string;
   reportsTo: string | null;
+  altReportsTo: string[] | null;
   children: AgentNode[];
 }
 
@@ -193,6 +194,31 @@ export default function CompanyOrg() {
     setPan({ x: cw / 2 - (contentW / 2 + minX), y: ch / 2 - (contentH / 2 + minY) - 50 });
   }, [positions]);
 
+  // Connector SVG paths (primary + alt managers)
+  const connectors = useMemo(() => {
+    const paths: { key: string; d: string; isAlt: boolean }[] = [];
+    Object.entries(allAgents).forEach(([id, node]) => {
+      const childPos = positions[id];
+      if (!childPos) return;
+      const parentIds: { mgrId: string; isAlt: boolean }[] = [];
+      if (node.reportsTo) parentIds.push({ mgrId: node.reportsTo, isAlt: false });
+      if (node.altReportsTo && node.altReportsTo.length > 0) {
+        node.altReportsTo.forEach(mId => parentIds.push({ mgrId: mId, isAlt: true }));
+      }
+      for (const { mgrId, isAlt } of parentIds) {
+        const parentPos = positions[mgrId];
+        if (!parentPos) continue;
+        const x1 = parentPos.x + CARD_W / 2;
+        const y1 = parentPos.y + CARD_H;
+        const x2 = childPos.x + CARD_W / 2;
+        const y2 = childPos.y;
+        const midY = y2 - V_GAP / 2;
+        paths.push({ key: `${mgrId}→${id}${isAlt ? '-alt' : ''}`, d: `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`, isAlt });
+      }
+    });
+    return paths;
+  }, [allAgents, positions]);
+
   if (loading) return <div style={{ padding: "2rem", color: "#888" }}>Loading...</div>;
   if (!company) return <p style={{ padding: "2rem", color: "#888" }}>No company selected.</p>;
 
@@ -237,21 +263,9 @@ export default function CompanyOrg() {
           }}>
             {/* Connector Lines */}
             <svg style={{ position: "absolute", top: 0, left: 0, width: "5000px", height: "5000px", overflow: "visible", pointerEvents: "none" }}>
-              {Object.entries(allAgents).map(([id, node]) => {
-                if (!node.reportsTo) return null;
-                const parentPos = positions[node.reportsTo];
-                const childPos = positions[id];
-                if (!parentPos || !childPos) return null;
-                const x1 = parentPos.x + CARD_W / 2;
-                const y1 = parentPos.y + CARD_H;
-                const x2 = childPos.x + CARD_W / 2;
-                const y2 = childPos.y;
-                const midY = y2 - V_GAP / 2;
-                return (
-                  <path key={id} d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
-                    fill="none" stroke="#334155" strokeWidth={2} />
-                );
-              })}
+              {connectors.map(c => (
+                <path key={c.key} d={c.d} fill="none" stroke={c.isAlt ? "#475569" : "#334155"} strokeWidth={c.isAlt ? 1.5 : 2} strokeDasharray={c.isAlt ? "6 3" : "none"} />
+              ))}
             </svg>
 
             {/* Agent Cards */}

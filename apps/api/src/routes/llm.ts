@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { llmProviders, companyMembers } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
+import { rateLimitMiddleware } from "../middleware/rate-limiter";
 import { createLLMProvider, type LLMMessage } from "../llm/provider";
 
 export const llmRouter = new Hono();
@@ -142,6 +143,12 @@ llmRouter.delete("/llm/providers/:providerId", async (c) => {
 
 // POST /llm/test - test a provider connection
 llmRouter.post("/llm/test", async (c) => {
+  const ip = c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "unknown";
+  const rl = rateLimitMiddleware(ip);
+  if (!rl.allowed) {
+    return c.json({ success: false, error: `Too many requests. Try again in ${rl.retryAfter}s` }, 429);
+  }
+
   const body = await c.req.json();
 
   if (!body.provider || !body.model) {
