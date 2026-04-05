@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { companyBriefs, companyMembers, agents, tasks, projects } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
+
+export const briefRouter = new Hono();
 briefRouter.use(authMiddleware);
 
 // GET /companies/:id/brief
@@ -81,7 +82,7 @@ briefRouter.post("/companies/:companyId/brief", async (c) => {
           projectId: targetProjectId,
           agentId: ceoAgent[0].id,
           title: "📋 Analyze Brief & Initialize Strategy",
-          description: `The Founders have provided a new company brief:\n\n**Vision:** ${body.vision}\n${body.marketContext ? `**Market Context:** ${body.marketContext}\n` : ""}${body.constraints ? `**Constraints:** ${body.constraints}\n` : ""}${body.priorities ? `**Priorities:** ${body.priorities}\n` : ""}\n\nPlease analyze this brief, create necessary goals, hire any agents needed, and begin executing on this strategy.`,
+          description: `The Founders have provided a new company brief:\\n\\n**Vision:** ${body.vision}\\n${body.marketContext ? `**Market Context:** ${body.marketContext}\\n` : ""}${body.constraints ? `**Constraints:** ${body.constraints}\\n` : ""}${body.priorities ? `**Priorities:** ${body.priorities}\\n` : ""}\\n\\nPlease analyze this brief, create necessary goals, hire any agents needed, and begin executing on this strategy.`,
           status: "ready",
           execStatus: "ready",
           priority: "high",
