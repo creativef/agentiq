@@ -112,85 +112,11 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
   const taskId = c.req.param("taskId");
   const taskCheck = await db.select().from(tasks).where(sql`${tasks.id} = ${taskId}`).limit(1);
   if (taskCheck.length === 0) return c.json({ error: "Task not found" }, 404);
-  const task = taskCheck[0];
-
-  let assignedAgentData = null;
-  if (task.agentId) {
-    const ag = await db.select().from(agents).where(sql`${agents.id} = ${task.agentId}`).limit(1);
-    if (ag.length > 0) assignedAgentData = ag[0];
-  }
-
-  let agentSkillList: Array<{ name: string; category: string; instructions: string }> = [];
-  if (task.agentId) {
-    const skillRows = await db
-      .select({ name: skillsTable.name, category: skillsTable.category, instructions: skillsTable.instructions })
-      .from(agentSkills).innerJoin(skillsTable, sql`${agentSkills.skillId} = ${skillsTable.id}`)
-      .where(sql`${agentSkills.agentId} = ${task.agentId}`);
-    agentSkillList = skillRows;
-  }
-
-  const projCheck = await db.select({ companyId: projects.companyId, id: projects.id })
-    .from(projects).where(sql`${projects.id} = ${task.projectId}`).limit(1);
-
-  let companyId: string;
-  let projectId: string;
-  if (projCheck.length > 0) {
-    companyId = projCheck[0].companyId;
-    projectId = projCheck[0].id || projCheck[0].companyId;
-  } else {
-    const companyCheck = await db.select({ companyId: companyMembers.companyId })
-      .from(companyMembers).where(sql`${companyMembers.userId} = ${task.assignedBy}`).limit(1);
-    if (companyCheck.length === 0) return c.json({ success: false, result: "❌ No company found." }, 500);
-    companyId = companyCheck[0].companyId;
-    projectId = companyCheck[0].companyId;
-  }
-
-  const execContext: ExecutionContext = {
-    taskId, taskTitle: task.title, taskDescription: task.description || "",
-    assignedAgent: assignedAgentData || { id: "", name: "System", role: "SYSTEM" },
-    companyId, projectId, agentSkills: agentSkillList,
-    scratchpad: task.scratchpad || null,
-  };
-
-  await db.update(tasks).set({ execStatus: "executing" }).where(sql`${tasks.id} = ${taskId}`);
-  await logAgentActivity(execContext.assignedAgent.id, taskId, "info", `🚀 Starting: "${task.title}"`);
 
   try {
-    const result = await runTaskExecution(execContext);
-    
-    await db.update(tasks).set({
-      execStatus: result.success ? "completed" : "failed",
-      status: result.success ? "done" : "blocked",
-      result: result.report,
-    }).where(sql`${tasks.id} = ${taskId}`);
-
-    console.log(`[Task ${taskId}] Result: ${result.success ? "completed✅" : "failed❌"}`);
-    console.log(`[Task ${taskId}] Report: ${result.report.substring(0, 200)}`);
-
-    // CHAT INTEGRATION: If this task came from a Chat message, reply back!
-    try {
-      if (task.title.toLowerCase().startsWith("chat:")) {
-        const replyToUser = task.assignedBy;
-        if (replyToUser) {
-          await db.insert(chatMessages).values({
-            companyId: companyId,
-            agentId: task.agentId || null,
-            userId: replyToUser,
-            content: result.success ? `✅ Done: ${result.report}` : `⚠️ ${result.report}`,
-            role: "agent",
-          });
-        }
-      }
-    } catch (replyErr: any) {
-      // Log error but do NOT crash the task execution
-      console.error("[Task] Failed to send chat reply:", replyErr.message);
-    }
-
-    return c.json({ success: result.success, steps: result.steps, result: result.report });
+    const result = await executeTaskById(taskId);
+    return c.json({ success: result.success, steps: result.steps, result: result.result });
   } catch (e: any) {
-    await db.update(tasks).set({
-      execStatus: "failed", status: "blocked", result: `Execution Crashed: ${e.message}`,
-    }).where(sql`${tasks.id} = ${taskId}`);
     return c.json({ success: false, result: `Crashed: ${e.message}` }, 500);
   }
 });

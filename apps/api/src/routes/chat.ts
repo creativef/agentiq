@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { companyMembers, companies, agents, users } from "../db/schema";
+import { companyMembers, companies, agents, users, projects } from "../db/schema";
 import { tasks } from "../db/schema";
 import { chatMessages } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
@@ -117,7 +117,7 @@ chatRouter.post("/chat", async (c) => {
          }
       }
 
-      const taskTitle = `Chat: ${body.content.substring(0, 40)}${body.content.length > 40 ? '...' : ''}`;
+      const taskTitle = `chat: ${body.content.substring(0, 40)}${body.content.length > 40 ? '...' : ''}`;
       
       const newTask = await db.insert(tasks).values({
         title: taskTitle,
@@ -130,6 +130,14 @@ chatRouter.post("/chat", async (c) => {
       }).returning();
 
       console.log(`[Chat] Created Task ${newTask[0].id} for ${agentCheck[0].name}: "${taskTitle}"`);
+
+      // Auto-execute chat tasks so the user gets a response
+      try {
+        const { executeTaskById } = await import("../task-execution");
+        await executeTaskById(newTask[0].id);
+      } catch (execErr: any) {
+        console.error("[Chat] Auto-execute failed:", execErr.message);
+      }
 
       return c.json({ 
         message: msg[0], 

@@ -221,7 +221,17 @@ export async function executeTaskById(taskId: string): Promise<{ success: boolea
   await db.update(tasks).set({ execStatus: "executing" }).where(sql`${tasks.id} = ${taskId}`);
   await logAgentActivity(execContext.assignedAgent.id, taskId, "info", `🚀 Starting: "${task.title}"`);
 
-  const result = await executeTask(execContext);
+  let result: { success: boolean; steps: ExecutionStep[]; report: string };
+  try {
+    result = await executeTask(execContext);
+  } catch (e: any) {
+    await db.update(tasks).set({
+      execStatus: "failed",
+      status: "blocked",
+      result: `Execution Crashed: ${e.message || "Unknown error"}`,
+    }).where(sql`${tasks.id} = ${taskId}`);
+    throw e;
+  }
 
   await db.update(tasks).set({
     execStatus: result.success ? "completed" : "failed",
