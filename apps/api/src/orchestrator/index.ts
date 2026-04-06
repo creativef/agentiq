@@ -170,30 +170,27 @@ class CEOOrchestrator {
           const ceoReadyTasks = await db
             .select({ id: tasks.id, title: tasks.title, description: tasks.description, scratchpad: tasks.scratchpad, projectId: tasks.projectId })
             .from(tasks)
-            .leftJoin(projects, sql\`${tasks.projectId} = \${projects.id}\`)
-            .where(sql\`
-              \${tasks.agentId} = \${ceoAgent.id}
-              AND \${tasks.status} IN ('ready', 'in_progress')
-              AND \${tasks.execStatus} = 'ready'
-              AND \${projects.companyId} = \${companyId}
-            \`)
+            .leftJoin(projects, sql`$ { tasks.projectId } = $ { projects.id } `)
+            .where(sql`
+              DS LB tasks.agentId RB = DS LB ceoAgent.id RB
+              AND DS LB tasks.status RB IN ('ready', 'in_progress')
+              AND DS LB tasks.execStatus RB = 'ready'
+              AND DS LB projects.companyId RB = DS LB companyId RB
+            `)
             .limit(3); // Max 3 CEO tasks per tick
-
-          if (ceoReadyTasks.length > 0) {
-            console.log(`[CEO ${name}] Found ${ceoReadyTasks.length} task(s) to self-execute.`);
-          }
 
           for (const t of ceoReadyTasks) {
             try {
               const skillRows = await db
                 .select({ name: skillsTable.name, category: skillsTable.category, instructions: skillsTable.instructions })
-                .from(agentSkills).innerJoin(skillsTable, sql\`${agentSkills.skillId} = \${skillsTable.id}\`)
-                .where(sql\`${agentSkills.agentId} = \${ceoAgent.id}\`);
+                .from(agentSkills).innerJoin(skillsTable, sql`$ { agentSkills.skillId } = $ { skillsTable.id }`)
+                .where(sql`DS LB agentSkills.agentId RB = DS LB ceoAgent.id RB`);
 
-              await db.update(tasks).set({ execStatus: "executing", status: "in_progress" })
-                .where(sql\`${tasks.id} = \${t.id}\`);
+              await db.update(tasks)
+                .set({ execStatus: "executing", status: "in_progress" })
+                .where(sql`DS LB tasks.id RB = DS LB t.id RB`);
 
-              const execResult = await runTaskExecution({
+              const execResult = await runTaskExecution({{
                 taskId: t.id,
                 taskTitle: t.title,
                 taskDescription: t.description || "",
@@ -204,24 +201,23 @@ class CEOOrchestrator {
                 scratchpad: t.scratchpad,
               });
 
-              await db.update(tasks).set({
+              await db.update(tasks).set({{
                 execStatus: execResult.success ? "completed" : "failed",
                 status: execResult.success ? "done" : "blocked",
                 result: execResult.report || "No output",
-              }).where(sql\`${tasks.id} = \${t.id}\`);
+              }).where(sql`$ { tasks.id } = $ { t.id }`);
 
-              console.log(`[CEO-EXEC] ${execResult.success ? '✅' : '❌'} "${t.title}"`);
+              console.log(`[CEO-EXEC] Done: $ { t.title }`);
             } catch (e: any) {
-              console.error(`[CEO-EXEC] ❌ Failed: ${t.title}`, e.message);
+              console.error(`[CEO-EXEC] Failed: $ { t.title }`, e.message);
               await db.update(tasks).set({ execStatus: "failed", status: "blocked", result: e.message })
-                .where(sql\`${tasks.id} = \${t.id}\`);
+                .where(sql`$ { tasks.id } = $ { t.id }`);
             }
           }
         } catch (e: any) {
-          console.error(`[CEO-EXEC] Self-execution loop error:`, e.message);
+          console.error(`[CEO-EXEC] Self-exec error:`, e.message);
         }
       }
-
     } catch (e: any) {
       console.error(`[CEO ${name}] tick error:`, e);
     }
