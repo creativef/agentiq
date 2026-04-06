@@ -45,11 +45,12 @@ export const agents = pgTable("agents", {
   costMonthly: integer("cost_monthly").default(0),
   budgetLimit: integer("budget_limit"),
   heartbeatInterval: integer("heartbeat_interval").default(3600),
+  scratchpad: text("scratchpad"),  // CEO injects context/goals
   platform: text("platform"),
   externalId: text("external_id"),
   reportsTo: uuid("reports_to").references(() => agents.id),
-  altReportsTo: uuid("alt_reports_to").array(),  // For CEO → multiple founders
-  xPos: integer("x_pos"),  // Draggable org chart position
+  altReportsTo: uuid("alt_reports_to").array(),
+  xPos: integer("x_pos"),
   yPos: integer("y_pos"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -70,6 +71,7 @@ export const tasks = pgTable("tasks", {
   approverRole: text("approver_role"), // e.g., "FOUNDER", "CEO"
   approvalStatus: text("approval_status"), // null -> pending -> approved -> rejected
   result: text("result"), // Agent's output/report
+  scratchpad: text("scratchpad"), // Shared context passed down by CEO
   assignedBy: text("assigned_by"), // User ID of creator
 });
 

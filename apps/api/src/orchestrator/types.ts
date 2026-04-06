@@ -77,13 +77,20 @@ export type ActionTypeName =
   | "escalate_to_founders"
   | "create_report"
   | "approve_subtask"
-  | "send_notification";
+  | "send_notification"
+  | "ceo_tool"; // NEW: Structured CEO tool execution
 
 export interface CEOAction {
   type: ActionTypeName;
   payload: Record<string, any>;
   reason: string;
   confidence: "high" | "medium" | "low";
+}
+
+// NEW: Structured CEO Action for tool-based execution
+export interface CEOToolAction {
+  tool: string;  // "create_task", "update_scratchpad", "stop_task", "follow_up", "report", "set_goal"
+  [key: string]: any;
 }
 
 export interface AgentMatch {

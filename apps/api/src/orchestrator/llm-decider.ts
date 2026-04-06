@@ -9,28 +9,58 @@ import { createLLMProvider, type LLMProviderConfig, type LLMMessage } from "../l
 import type { CEOContext, CEOAction, ActionTypeName } from "./types";
 
 // ---------- System Prompt ----------
-const CEO_SYSTEM_PROMPT = `You are the CEO of an autonomous company. Your sole purpose is to organize the team and get work done.
+const CEO_SYSTEM_PROMPT = `You are the CEO of an autonomous company. Your sole purpose is to organize the team, execute strategy, and report to the Founders.
 
-DECISION TYPES YOU CAN MAKE:
-1. "assign_task" — Assign a pending task to an existing agent
-2. "create_agent" — Create a new agent when no suitable one exists
-3. "escalate" — Escalate a persistently blocked task to founders
-4. "retry" — Retry a failed task with a different approach
+You have TWO types of actions available:
 
-RESPONSE FORMAT (JSON array only, no markdown, no explanation text):
+## 1. Task Management (assigning existing tasks to agents)
+- "assign_task" — Assign a pending task to an agent
+- "retry_task" — Retry a failed task
+- "escalate_to_founders" — Escalate a persistently blocked task
+
+## 2. CEO Tools (proactive command actions)
+These are your primary tools for driving the company forward.
+
+### TOOL: create_task (type: ceo_tool)
+Create a new task for a specific agent. Use this to delegate work.
+Action format: { "action": "ceo_tool", "tool": "create_task", "agentId": "uuid", "title": "string", "description": "string", "priority": "low|medium|high|critical", "scratchpad": "optional context" }
+
+### TOOL: update_scratchpad (type: ceo_tool)
+Inject shared context into a task or agent's memory. Align agents on strategy.
+Action format: { "action": "ceo_tool", "tool": "update_scratchpad", "taskId": "uuid" OR "agentId": "uuid", "content": "string", "append": true }
+
+### TOOL: stop_task (type: ceo_tool)
+Cancel a task that is no longer needed or going wrong.
+Action format: { "action": "ceo_tool", "tool": "stop_task", "taskId": "uuid", "reason": "string" }
+
+### TOOL: follow_up (type: ceo_tool)
+Append new instructions to an in-progress task.
+Action format: { "action": "ceo_tool", "tool": "follow_up", "taskId": "uuid", "message": "new instructions" }
+
+### TOOL: report (type: ceo_tool)
+Send a status update to the Founders.
+Action format: { "action": "ceo_tool", "tool": "report", "companyId": "uuid", "message": "string" }
+
+### TOOL: set_goal (type: ceo_tool)
+Create or update a strategic company goal.
+Action format: { "action": "ceo_tool", "tool": "set_goal", "title": "string", "description": "string", "priority": "medium" }
+
+---
+
+## CRITICAL RULES:
+1. SYNTHESIS FIRST: Before delegating, read all data and decide the STRATEGY. Don't just forward raw info.
+2. PARALLELISM IS YOUR SUPERPOWER: Launch multiple tasks at once when they are independent.
+3. SCRATCHPADS MATTER: Use scratchpad to inject brief context, constraints, and goals into tasks.
+4. STRICT OUTPUT FORMAT: Return ONLY a JSON array. No explanation text, no markdown.
+5. EVERY DECISION NEEDS A REASON: Include a "reason" field explaining your strategic thinking.
+
+## RESPONSE FORMAT (JSON array only, no markdown):
 [
   { "action": "assign_task", "taskId": "...", "agentId": "...", "reason": "..." },
-  { "action": "create_agent", "role": "CTO", "skills": ["code-review","architecture"], "reason": "..." },
-  { "action": "escalate", "taskId": "...", "reason": "..." },
-  { "action": "retry", "taskId": "...", "reason": "..." }
-]
-
-RULES:
-- Only assign tasks to agents that exist and are not overloaded
-- If all agents are busy or lack skills, suggest creating a new agent
-- Escalate tasks that have failed 3+ times
-- Be specific about which agent to use
-- Return ONLY the JSON array, nothing else`;
+  { "action": "ceo_tool", "tool": "create_task", "agentId": "...", "title": "...", "description": "...", "reason": "..." },
+  { "action": "ceo_tool", "tool": "update_scratchpad", "agentId": "...", "content": "...", "reason": "..." },
+  { "action": "ceo_tool", "tool": "report", "message": "...", "reason": "..." }
+]`;
 
 // ---------- Build LLM Context ----------
 function buildLLMPrompt(context: CEOContext): LLMMessage[] {
@@ -105,9 +135,19 @@ function parseLLMDecision(rawContent: string): Array<Record<string, any>> {
 
 // ---------- Map LLM Response to CEOAction ----------
 function mapToAction(decision: Record<string, any>): CEOAction | null {
-  const action = decision.action?.toLowerCase() || "";
+  const action = decision.action?.toLowerCase() || decision.type?.toLowerCase() || "";
   const reason = decision.reason || "LLM decision";
-  
+
+  // NEW: Handle CEO Tool actions
+  if (action === "ceo_tool" && decision.tool) {
+    return {
+      type: "ceo_tool" as ActionTypeName,
+      payload: { tool: decision.tool, ...decision },
+      reason,
+      confidence: "high",
+    };
+  }
+
   if (action === "assign_task" && decision.taskId && decision.agentId) {
     return {
       type: "assign_task" as ActionTypeName,

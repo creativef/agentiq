@@ -1,13 +1,14 @@
 // ============================================================
-// Action Executor — Turns CEO decisions into DB operations
+// CEO Action Executor — Execute decisions from the CEO brain
 // ============================================================
 
 import { db } from "../db/client";
-import { tasks, events } from "../db/schema";
 import { sql } from "drizzle-orm";
+import { agents, tasks } from "../db/schema";
 import { logAgentActivity } from "../utils/agentLogger";
-import { executeEscalation } from "./escalation-engine";
-import type { CEOAction, CEOContext } from "./types";
+import type { CEOContext, CEOAction } from "./types";
+import { executeCEOTool } from "./ceo-tools";
+import { createAgent } from "./hiring-engine";
 
 export async function executeAction(
   action: CEOAction,
@@ -93,6 +94,20 @@ export async function executeAction(
           .catch((e) => console.error("Failed to write CEO report event:", e));
 
         return { success: true, detail: `CEO report stored for founders` };
+      }
+
+      case "ceo_tool": {
+        const toolAction = action.payload;
+        const result = await executeCEOTool(context.companyId, toolAction);
+        
+        // Log the tool execution for visibility
+        if (result.success) {
+          console.log(`[CEO Tool] ${toolAction.tool}:`, JSON.stringify(result.result));
+          return { success: true, detail: `Tool ${toolAction.tool} executed: ${JSON.stringify(result.result)}` };
+        } else {
+          console.error(`[CEO Tool] ${toolAction.tool} failed:`, result.error);
+          return { success: false, detail: `Tool ${toolAction.tool} failed: ${result.error}` };
+        }
       }
 
       default:

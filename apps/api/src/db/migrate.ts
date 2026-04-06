@@ -59,6 +59,7 @@ async function main() {
         y_pos INT,
         created_at TIMESTAMP DEFAULT NOW(),
         heartbeat_interval INTEGER DEFAULT 3600,
+        scratchpad TEXT,
         platform TEXT,
         external_id TEXT
       )
@@ -74,6 +75,7 @@ async function main() {
         priority TEXT DEFAULT 'medium',
         created_at TIMESTAMP DEFAULT NOW(),
         due_date TIMESTAMP,
+        scratchpad TEXT,
         exec_status TEXT DEFAULT 'idle',
         scheduled_at TIMESTAMP,
         approver_role TEXT,
