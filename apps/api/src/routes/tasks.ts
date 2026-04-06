@@ -238,6 +238,7 @@ tasksRouter.post("/tasks", async (c) => {
     description: body.description || null, status: taskStatus, priority: body.priority || "medium",
     execStatus, scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
     approverRole: body.approverRole || null, approvalStatus, assignedBy: user.userId,
+    scratchpad: body.scratchpad || null,
   }).returning();
 
   if (!approvalStatus && !body.scheduledAt) {

@@ -1,8 +1,7 @@
 import { db } from "../db/client";
 import { agents, agentSkills, skills, tasks, agentLogs, companies, projects, companyBriefs } from "../db/schema";
 import { sql } from "drizzle-orm";
-import type { CEOContext, AgentCapability, TaskRequirement, InProgressTask, BlockedTask } from "./types";
-import { logAgentActivity } from "../utils/agentLogger";
+import type { CEOContext, AgentCapability, TaskRequirement, InProgressTask, BlockedTask, CompanyBrief as CBType } from "./types";
 
 export async function buildCEOContext(companyId: string): Promise<CEOContext> {
   // 1. Company info
@@ -14,7 +13,7 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
 
   if (company.length === 0) throw new Error(`Company ${companyId} not found`);
 
-  // 2. Agent capabilities with skills
+  // 2. Agent capabilities with skills + scratchpad
   const agentRows = await db
     .select({
       agent: agents,
@@ -26,6 +25,8 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
     .where(sql`${agents.companyId} = ${companyId}`);
 
   const agentMap = new Map<string, AgentCapability>();
+  const agentScratchpads = new Map<string, string>();
+
   for (const row of agentRows) {
     const a = row.agent;
     if (!agentMap.has(a.id)) {
@@ -38,6 +39,7 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
         activeTaskCount: 0,
         failedTaskCount: 0,
       });
+      if (a.scratchpad) agentScratchpads.set(a.id, a.scratchpad);
     }
     if (row.skillName && !agentMap.get(a.id)!.skills.includes(row.skillName)) {
       agentMap.get(a.id)!.skills.push(row.skillName);
@@ -58,7 +60,7 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
 
   const agentsList = [...agentMap.values()];
 
-  // 4. Pending tasks (backlog, ready, or todo)
+  // 4. Pending tasks (backlog, ready, or todo) — include scratchpad
   const pending = await db
     .select({
       id: tasks.id,
@@ -67,6 +69,7 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
       priority: tasks.priority,
       status: tasks.status,
       execStatus: tasks.execStatus,
+      scratchpad: tasks.scratchpad,
     })
     .from(tasks)
     .leftJoin(projects, sql`${tasks.projectId} = ${projects.id}`)
@@ -78,16 +81,17 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
       WHEN 'low' THEN 3
       ELSE 4 END`);
 
-  const pendingTasks: TaskRequirement[] = pending.map((t) => ({
+  const pendingTasks: (TaskRequirement & { scratchpad?: string | null })[] = pending.map((t) => ({
     taskId: t.id,
     title: t.title,
     description: t.description || "",
     inferredSkills: extractRequiredSkills(t.title, t.description || ""),
     priority: t.priority || "medium",
     isUrgent: t.priority === "high",
+    scratchpad: t.scratchpad,
   }));
 
-  // 5. In-progress tasks
+  // 5. In-progress tasks — include scratchpad
   const inProgressRaw = await db
     .select({
       id: tasks.id,
@@ -95,17 +99,19 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
       agentId: tasks.agentId,
       status: tasks.status,
       execStatus: tasks.execStatus,
+      scratchpad: tasks.scratchpad,
     })
     .from(tasks)
     .leftJoin(projects, sql`${tasks.projectId} = ${projects.id}`)
     .where(sql`(${projects.companyId} = ${companyId}) AND ${tasks.status} = 'in_progress'`);
 
-  const inProgressTasks: InProgressTask[] = inProgressRaw.map((t) => ({
+  const inProgressTasks: (InProgressTask & { scratchpad?: string | null })[] = inProgressRaw.map((t) => ({
     id: t.id,
     title: t.title,
     agentId: t.agentId,
     status: t.status,
     execStatus: t.execStatus || "",
+    scratchpad: t.scratchpad,
   }));
 
   // 6. Blocked tasks
@@ -121,9 +127,30 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
 
   const blockedTasks: BlockedTask[] = blockedRaw.map((t) => ({
     id: t.id,
+    taskId: t.id,
     title: t.title,
     status: t.status,
+    retryCount: 0,
+    lastError: null,
   }));
+
+  // 7. Company Brief
+  let brief: CBType | null = null;
+  const briefRows = await db
+    .select()
+    .from(companyBriefs)
+    .where(sql`${companyBriefs.companyId} = ${companyId} AND ${companyBriefs.status} = 'active'`)
+    .orderBy(companyBriefs.createdAt)
+    .limit(1);
+
+  if (briefRows.length > 0) {
+    brief = {
+      vision: briefRows[0].vision,
+      marketContext: briefRows[0].marketContext,
+      constraints: briefRows[0].constraints,
+      priorities: briefRows[0].priorities,
+    };
+  }
 
   const budgetRemaining = 100 - agentsList.reduce((sum, a) => sum + (a.costMonthly || 0), 0);
 
@@ -132,15 +159,17 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
     companyName: company[0].name,
     companyGoal: company[0].goal,
     agents: agentsList,
-    pendingTasks,
-    inProgressTasks,
+    brief,
+    pendingTasks: pendingTasks as TaskRequirement[],
+    inProgressTasks: inProgressTasks as InProgressTask[],
     blockedTasks,
     budgetRemaining,
     lastReportAt: null,
   };
 }
 
-// Skill extraction from task text — keyword-based, replace with LLM later
+// Skill extraction from task text — keyword-based.
+// TODO: Replace with LLM-based inference for better accuracy.
 function extractRequiredSkills(title: string, description: string): string[] {
   const text = `${title} ${description}`.toLowerCase();
 

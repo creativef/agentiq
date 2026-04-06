@@ -8,6 +8,7 @@ export interface AgentCapability {
   role: string;
   status: string;
   skills: string[];
+  scratchpad: string | null;  // CEO-injected context for this agent
   activeTaskCount: number;
   failedTaskCount: number;
 }

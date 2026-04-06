@@ -67,11 +67,11 @@ function buildLLMPrompt(context: CEOContext): LLMMessage[] {
   const { company, agents, pendingTasks, blockedTasks, brief } = context;
 
   const teamSummary = agents.map((a) => 
-    `- ${a.name} (${a.role}): Skills: [${a.skills.join(", ") || "none"}] | Active: ${a.activeTaskCount} | Failed: ${a.failedTaskCount}`
+    `- ${a.name} (${a.role}): Skills: [${a.skills.join(", ") || "none"}] | Active: ${a.activeTaskCount} | Failed: ${a.failedTaskCount}${a.scratchpad ? ` | Scratchpad: ${a.scratchpad}` : ""}`
   ).join("\n");
 
   const pendingSummary = pendingTasks.map((t) => 
-    `- [${t.taskId}] "${t.title}": Needs [${t.inferredSkills.join(", ") || "general"}] | Priority: ${t.priority}`
+    `- [${(t as any).taskId}] "${t.title}": Needs [${t.inferredSkills.join(", ") || "general"}] | Priority: ${t.priority}${(t as any).scratchpad ? ` | Context: ${(t as any).scratchpad}` : ""}`
   ).join("\n") || "None";
 
   const blockedSummary = blockedTasks.map((t) => 
