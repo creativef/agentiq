@@ -37,5 +37,25 @@ services:
       postgres:
         condition: service_healthy
 
+  hermes-bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mission-control-hermes-bridge
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/missioncontrol
+      HERMES_BRIDGE_URL: ${HERMES_BRIDGE_URL}
+      HERMES_BRIDGE_TOKEN: ${HERMES_BRIDGE_TOKEN}
+      HERMES_BRIDGE_INTERVAL_SECONDS: ${HERMES_BRIDGE_INTERVAL_SECONDS:-10}
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_started
+    command: ["bash", "apps/api/src/cli/hermes-bridge-loop.sh"]
+
 volumes:
   pgdata:
