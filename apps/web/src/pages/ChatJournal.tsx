@@ -26,6 +26,7 @@ export default function ChatJournal() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const lastFetch = useRef(0);
   const endRef = useRef<HTMLDivElement>(null);
   const isAtBottom = useRef(true);
@@ -172,6 +173,7 @@ export default function ChatJournal() {
     
     setSending(true);
     try {
+      setError(null);
       const res = await fetch("/api/chat", {
         method: "POST",
         credentials: "include",
@@ -186,6 +188,9 @@ export default function ChatJournal() {
         setInput("");
         lastFetch.current = Date.now();
         fetchMessages();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error || `Request failed (${res.status})`);
       }
     } finally {
       setSending(false);
@@ -269,6 +274,11 @@ export default function ChatJournal() {
       </div>
 
       {/* Input Area */}
+      {error && (
+        <div style={{ color: "#f87171", marginBottom: "0.5rem" }}>
+          {error}
+        </div>
+      )}
       <form onSubmit={handleSend} style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
         <input
           autoFocus
