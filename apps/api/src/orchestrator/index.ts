@@ -66,7 +66,9 @@ class CEOOrchestrator {
       const ctx = await buildCEOContext(companyId);
       
       // 2. Resolve active LLM
-      const llmRow = await db.select().from(llmProviders).where(eq(llmProviders.companyId, companyId)).limit(1);
+      const llmRow = await db.select().from(llmProviders)
+        .where(and(eq(llmProviders.companyId, companyId), eq(llmProviders.isActive, true)))
+        .limit(1);
       const llmConfig: LLMProviderConfig | null = llmRow.length > 0
         ? {
             provider: llmRow[0].provider as any,
@@ -74,6 +76,7 @@ class CEOOrchestrator {
             apiKey: llmRow[0].apiKey || undefined,
             maxTokens: llmRow[0].maxTokens || 4000,
             temperature: llmRow[0].temperature || 0.3,
+            baseUrl: llmRow[0].baseUrl || undefined,
           }
         : null;
 

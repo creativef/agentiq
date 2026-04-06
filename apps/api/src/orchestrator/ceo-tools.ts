@@ -3,7 +3,7 @@
 // Each tool is a JSON command that the execution engine parses
 // ============================================================
 import { db } from "../db/client";
-import { tasks, agents, projects, companyBriefs } from "../db/schema";
+import { tasks, agents, projects, companyBriefs, events, goals } from "../db/schema";
 import { sql } from "drizzle-orm";
 
 // ─── CEO Tool Definitions ───────────────────────────────────
@@ -189,6 +189,40 @@ export async function executeCEOTool(companyId: string, action: CEOAction): Prom
         }).where(sql`${tasks.id} = ${action.taskId}`);
 
         return { success: true, result: { taskId: action.taskId } };
+      }
+
+      case "report": {
+        if (!action.message) {
+          return { success: false, error: "Missing message" };
+        }
+        await db.insert(events).values({
+          companyId,
+          type: "ceo_report",
+          actor: "CEO",
+          description: action.message,
+          meta: JSON.stringify({ channel: action.channel || "chat" }),
+        });
+        return { success: true, result: { type: "report", channel: action.channel || "chat" } };
+      }
+
+      case "set_goal": {
+        if (!action.title || !action.description) {
+          return { success: false, error: "Missing title or description" };
+        }
+        const goalTitle = `${action.title}: ${action.description}`;
+        const row = await db.insert(goals).values({
+          companyId,
+          title: goalTitle,
+          progress: 0,
+        }).returning();
+        await db.insert(events).values({
+          companyId,
+          type: "goal_set",
+          actor: "CEO",
+          description: action.title,
+          meta: JSON.stringify({ description: action.description, priority: action.priority || "medium" }),
+        });
+        return { success: true, result: { goalId: row[0].id, title: row[0].title } };
       }
 
       default:

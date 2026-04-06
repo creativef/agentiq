@@ -19,7 +19,7 @@ export async function executeAction(
         const { taskId, agentId, agentName, matchPercentage } = action.payload;
         await db
           .update(tasks)
-          .set({ agentId, status: "in_progress", execStatus: "executing", approvalStatus: "approved" })
+          .set({ agentId, status: "in_progress", execStatus: "ready", approvalStatus: "approved" })
           .where(sql`${tasks.id} = ${taskId}`);
 
         await logAgentActivity(
@@ -28,6 +28,15 @@ export async function executeAction(
           "action",
           `CEO assigned task. Skill match: ${matchPercentage.toFixed(0)}%. Reason: ${action.reason}`,
         );
+
+        // Auto-execute immediately
+        try {
+          const { executeTaskById } = await import("../task-execution");
+          await executeTaskById(taskId);
+        } catch (e: any) {
+          await db.update(tasks).set({ execStatus: "failed", status: "blocked", result: `Auto-execute failed: ${e.message}` })
+            .where(sql`${tasks.id} = ${taskId}`);
+        }
 
         return { success: true, detail: `Assigned task ${taskId.slice(0,8)}... to ${agentName}` };
       }
@@ -57,10 +66,19 @@ export async function executeAction(
         const { taskId } = action.payload;
         await db
           .update(tasks)
-          .set({ status: "in_progress", execStatus: "executing" })
+          .set({ status: "in_progress", execStatus: "ready" })
           .where(sql`${tasks.id} = ${taskId}`);
 
         await logAgentActivity(action.payload.agentId || "SYSTEM", taskId, "action", `Retried by CEO: ${action.reason}`);
+
+        // Auto-execute immediately
+        try {
+          const { executeTaskById } = await import("../task-execution");
+          await executeTaskById(taskId);
+        } catch (e: any) {
+          await db.update(tasks).set({ execStatus: "failed", status: "blocked", result: `Auto-execute failed: ${e.message}` })
+            .where(sql`${tasks.id} = ${taskId}`);
+        }
 
         return { success: true, detail: `Retrying task ${taskId.slice(0,8)}...` };
       }

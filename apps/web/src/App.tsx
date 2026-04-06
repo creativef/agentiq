@@ -79,11 +79,14 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/*" element={<ProtectedRoute />}>
-              <Route path="*" element={
-                <ErrorBoundary>
-                  <AuthedApp />
-                </ErrorBoundary>
-              } />
+              <Route
+                path="*"
+                element={
+                  <ErrorBoundary>
+                    <AuthedApp />
+                  </ErrorBoundary>
+                }
+              />
             </Route>
           </Routes>
         </AuthProvider>

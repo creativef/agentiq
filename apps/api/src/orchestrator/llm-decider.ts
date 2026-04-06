@@ -203,7 +203,7 @@ export async function makeLLMDecisions(
     const messages = buildLLMPrompt(context);
     const response = await provider.chat(messages);
     const latency = Date.now() - start;
-    const tokens = response.usage?.totalTokens || 0;
+    const tokens = (response.usage as any)?.totalTokens ?? (response.usage as any)?.total_tokens ?? 0;
 
     console.log(`[CEO-LLM ${llmConfig.provider}/${llmConfig.model}] Decision in ${latency}ms (${tokens} tokens)`);
     console.log(`[CEO-LLM] Response: ${response.content.slice(0, 300)}`);

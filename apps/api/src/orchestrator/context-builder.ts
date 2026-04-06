@@ -25,7 +25,6 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
     .where(sql`${agents.companyId} = ${companyId}`);
 
   const agentMap = new Map<string, AgentCapability>();
-  const agentScratchpads = new Map<string, string>();
 
   for (const row of agentRows) {
     const a = row.agent;
@@ -36,10 +35,10 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
         role: a.role,
         status: a.status,
         skills: [],
+        scratchpad: a.scratchpad || null,
         activeTaskCount: 0,
         failedTaskCount: 0,
       });
-      if (a.scratchpad) agentScratchpads.set(a.id, a.scratchpad);
     }
     if (row.skillName && !agentMap.get(a.id)!.skills.includes(row.skillName)) {
       agentMap.get(a.id)!.skills.push(row.skillName);
@@ -156,6 +155,7 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
 
   return {
     companyId,
+    company: { id: companyId, name: company[0].name, goal: company[0].goal },
     companyName: company[0].name,
     companyGoal: company[0].goal,
     agents: agentsList,
