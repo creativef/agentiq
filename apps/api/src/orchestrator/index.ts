@@ -1,4 +1,4 @@
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, isNull, or } from "drizzle-orm";
 import { db } from "../db/client";
 import { companies, llmProviders } from "../db/schema";
 import { buildCEOContext } from "./context-builder";
@@ -51,10 +51,7 @@ class CEOOrchestrator {
 
   async tickAll() {
     try {
-      const allCompanies = await db
-        .select({ id: companies.id, name: companies.name })
-        .from(companies);
-
+      const allCompanies = await db.select({ id: companies.id, name: companies.name }).from(companies);
       for (const company of allCompanies) {
         await this.tickCompany(company.id, company.name);
       }
@@ -65,7 +62,7 @@ class CEOOrchestrator {
 
   async tickCompany(companyId: string, name: string) {
     try {
-      // 1. Build context (Agents, Tasks, Briefs)
+      // 1. Build context
       const ctx = await buildCEOContext(companyId);
       
       // 2. Resolve active LLM
@@ -125,14 +122,19 @@ class CEOOrchestrator {
 
   /**
    * CEO Inbox: The CEO looks for tasks assigned to itself and executes them directly.
-   * This implements the "Player-Coach" pattern where the CEO doesn't just manage
-   * strategy but actively runs the "Brief Analysis" and "Strategy" tasks.
+   * FIXED: Now handles cases where tasks don't have a specific project assigned.
    */
   async executeCEOInbox(companyId: string, name: string, ctx: any) {
     const ceoAgent = ctx.agents.find((a: any) => a.role === 'CEO');
-    if (!ceoAgent) return;
+    if (!ceoAgent) {
+      console.warn(`[CEO ${name}] No CEO agent found in context.`);
+      return;
+    }
+
+    console.log(`[CEO ${name}] Checking inbox for agent ID: ${ceoAgent.id}...`);
 
     // Find CEO's ready tasks
+    // NOTE: We search for tasks where projectId IS NULL OR matches a project in this company
     const ceoReadyTasks = await db.select({
         id: tasks.id,
         title: tasks.title,
@@ -146,12 +148,19 @@ class CEOOrchestrator {
         eq(tasks.agentId, ceoAgent.id),
         inArray(tasks.status, ['ready', 'in_progress']),
         eq(tasks.execStatus, 'ready'),
-        eq(projects.companyId, companyId)
+        or(
+          isNull(projects.companyId), // Covers tasks with null projectId
+          eq(projects.companyId, companyId)
+        )
       ))
       .limit(3); // Max 3 tasks per tick
 
-    if (ceoReadyTasks.length === 0) return;
-    console.log(`[CEO ${name}] Found ${ceoReadyTasks.length} task(s) to self-execute.`);
+    if (ceoReadyTasks.length === 0) {
+      console.log(`[CEO ${name}] Inbox is empty.`);
+      return;
+    }
+
+    console.log(`[CEO ${name}] Found ${ceoReadyTasks.length} task(s) to self-execute:`, ceoReadyTasks.map(t => t.title));
 
     for (const t of ceoReadyTasks) {
       try {
@@ -168,10 +177,12 @@ class CEOOrchestrator {
 
         // Mark as executing
         await db.update(tasks)
-          .set({ execStatus: "executing", status: "in_progress" })
+          .set({ execStatus: "executing" })
           .where(eq(tasks.id, t.id));
 
-        // Run the execution engine (shared with API routes)
+        console.log(`[CEO ${name}] Executing task: "${t.title}"...`);
+
+        // Run the execution engine
         const result = await runTaskExecution({
           taskId: t.id,
           taskTitle: t.title,
@@ -187,10 +198,14 @@ class CEOOrchestrator {
         await db.update(tasks).set({
           execStatus: result.success ? "completed" : "failed",
           status: result.success ? "done" : "blocked",
-          result: result.report || "No output",
+          result: (result.report || "No output").substring(0, 2000),
         }).where(eq(tasks.id, t.id));
 
-        console.log(`[CEO-EXEC] ✅ Done: "${t.title}"`);
+        if (result.success) {
+          console.log(`[CEO-EXEC] ✅ Done: "${t.title}"`);
+        } else {
+          console.error(`[CEO-EXEC] ❌ Failed: "${t.title}"`);
+        }
 
       } catch (e: any) {
         console.error(`[CEO-EXEC] Failed: "${t.title}"`, e.message);
