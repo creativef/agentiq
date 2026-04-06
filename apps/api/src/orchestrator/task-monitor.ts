@@ -79,11 +79,15 @@ async function getInProgressDetails(companyId: string): Promise<InProgressDetail
   const details: InProgressDetail[] = [];
 
   for (const task of taskRows) {
+    // Skip CEO onboarding tasks — they are administrative, not operational
+    if (task.title.toLowerCase().includes("onboarding for")) continue;
+
+    // Get NEWEST log (desc), not oldest (asc)
     const latestLogs = await db
       .select({ createdAt: agentLogs.createdAt, level: agentLogs.level })
       .from(agentLogs)
       .where(sql`${agentLogs.taskId} = ${task.id}`)
-      .orderBy(agentLogs.createdAt)
+      .orderBy(sql`${agentLogs.createdAt} DESC`)
       .limit(1);
 
     details.push({

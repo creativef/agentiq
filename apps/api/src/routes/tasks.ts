@@ -53,9 +53,9 @@ async function createSubtask(ctx: ExecutionContext, role: string, title: string,
     description,
     status: "backlog",
     priority: "medium",
-    execStatus: "pending_approval",
-    approvalStatus: "pending",
-    approverRole: "CEO",
+    execStatus: "ready",
+    assignedBy: ctx.assignedAgent.id,
+    scratchpad: ctx.scratchpad || `Context from ${ctx.assignedAgent.name} (${ctx.assignedAgent.role})`,
   });
 }
 
@@ -326,8 +326,12 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
     
     await db.update(tasks).set({
       execStatus: result.success ? "completed" : "failed",
-      status: result.success ? "done" : "blocked", result: result.report,
+      status: result.success ? "done" : "blocked",
+      result: result.report,
     }).where(sql`${tasks.id} = ${taskId}`);
+
+    console.log(`[Task ${taskId}] Result: ${result.success ? "completed✅" : "failed❌"}`);
+    console.log(`[Task ${taskId}] Report: ${result.report.substring(0, 200)}`);
 
     // CHAT INTEGRATION: If this task came from a Chat message, reply back!
     try {
