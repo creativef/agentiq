@@ -4,11 +4,10 @@
 
 import { db } from "../db/client";
 import { sql } from "drizzle-orm";
-import { agents, tasks } from "../db/schema";
+import { agents, tasks, events } from "../db/schema";
 import { logAgentActivity } from "../utils/agentLogger";
 import type { CEOContext, CEOAction } from "./types";
 import { executeCEOTool } from "./ceo-tools";
-import { createAgent } from "./hiring-engine";
 
 export async function executeAction(
   action: CEOAction,
@@ -77,7 +76,12 @@ export async function executeAction(
       }
 
       case "escalate_to_founders": {
-        await executeEscalation(action, context.companyId);
+        await db.insert(events).values({
+          companyId: context.companyId,
+          type: "escalation",
+          actor: "CEO",
+          description: action.payload.reason || "Task escalation",
+        }).catch((e) => console.error("Failed to write escalation event:", e));
         return { success: true, detail: `Escalated to founders` };
       }
 
