@@ -17,6 +17,7 @@ import CompanyOrg from "./pages/CompanyOrg";
 import CompanySettings from "./pages/CompanySettings";
 import ConnectorsPage from "./pages/ConnectorsPage";
 import ProjectsPage from "./pages/ProjectsPage";
+import ReportsPage from "./pages/ReportsPage";
 
 const ProtectedRoute = () => {
   const { user } = useAuth();
@@ -41,6 +42,9 @@ function AuthedApp() {
       </Route>
       <Route path="history" element={<DashboardLayout />}>
         <Route index element={<TaskHistory />} />
+      </Route>
+      <Route path="reports" element={<DashboardLayout />}>
+        <Route index element={<ReportsPage />} />
       </Route>
       <Route path="brief" element={<DashboardLayout />}>
         <Route index element={<CompanyBriefsPage />} />
