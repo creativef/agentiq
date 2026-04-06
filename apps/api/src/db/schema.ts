@@ -71,6 +71,7 @@ export const tasks = pgTable("tasks", {
   approverRole: text("approver_role"), // e.g., "FOUNDER", "CEO"
   approvalStatus: text("approval_status"), // null -> pending -> approved -> rejected
   result: text("result"), // Agent's output/report
+  retryCount: integer("retry_count").default(0),
   scratchpad: text("scratchpad"), // Shared context passed down by CEO
   assignedBy: text("assigned_by"), // User ID of creator
 });

@@ -151,7 +151,7 @@ export async function executeAction(
         const { taskId } = action.payload;
         await db
           .update(tasks)
-          .set({ status: "in_progress", execStatus: "ready" })
+          .set({ status: "in_progress", execStatus: "ready", retryCount: sql`${tasks.retryCount} + 1` })
           .where(sql`${tasks.id} = ${taskId}`);
 
         await logAgentActivity(action.payload.agentId || "SYSTEM", taskId, "action", `Retried by CEO: ${action.reason}`);
@@ -172,7 +172,7 @@ export async function executeAction(
         const { taskId } = action.payload;
         await db
           .update(tasks)
-          .set({ agentId: null, status: "ready", execStatus: "scheduled" })
+          .set({ agentId: null, status: "ready", execStatus: "scheduled", retryCount: 0 })
           .where(sql`${tasks.id} = ${taskId}`);
 
         return { success: true, detail: `Requeued task ${taskId.slice(0,8)}... for re-routing` };

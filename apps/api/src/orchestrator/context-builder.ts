@@ -119,6 +119,8 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
       id: tasks.id,
       title: tasks.title,
       status: tasks.status,
+      retryCount: tasks.retryCount,
+      result: tasks.result,
     })
     .from(tasks)
     .leftJoin(projects, sql`${tasks.projectId} = ${projects.id}`)
@@ -129,8 +131,8 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
     taskId: t.id,
     title: t.title,
     status: t.status,
-    retryCount: 0,
-    lastError: null,
+    retryCount: t.retryCount || 0,
+    lastError: t.result || null,
   }));
 
   // 7. Company Brief

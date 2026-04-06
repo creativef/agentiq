@@ -71,7 +71,7 @@ export async function monitorTasks(context: CEOContext): Promise<CEOAction[]> {
 
 async function getInProgressDetails(companyId: string): Promise<InProgressDetail[]> {
   const taskRows = await db
-    .select({ id: tasks.id, title: tasks.title, agentId: tasks.agentId, status: tasks.status, execStatus: tasks.execStatus })
+    .select({ id: tasks.id, title: tasks.title, agentId: tasks.agentId, status: tasks.status, execStatus: tasks.execStatus, retryCount: tasks.retryCount })
     .from(tasks)
     .leftJoin(projects, sql`${tasks.projectId} = ${projects.id}`)
     .where(sql`(${projects.companyId} = ${companyId}) AND ${tasks.status} = 'in_progress'`);
@@ -98,7 +98,7 @@ async function getInProgressDetails(companyId: string): Promise<InProgressDetail
       execStatus: task.execStatus || "",
       lastLogTime: latestLogs[0]?.createdAt || null,
       lastLogLevel: latestLogs[0]?.level || null,
-      retryCount: 0,
+      retryCount: task.retryCount || 0,
     });
   }
 

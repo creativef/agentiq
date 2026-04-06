@@ -81,6 +81,7 @@ async function main() {
         approver_role TEXT,
         approval_status TEXT,
         result TEXT,
+        retry_count INT DEFAULT 0,
         assigned_by TEXT,
         x_pos INT,
         y_pos INT
@@ -272,6 +273,7 @@ async function main() {
     ['tasks', 'approver_role', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approver_role TEXT"],
     ['tasks', 'approval_status', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approval_status TEXT"],
     ['tasks', 'result', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS result TEXT"],
+    ['tasks', 'retry_count', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS retry_count INT DEFAULT 0"],
   ];
 
   for (const [tbl, col, stmt] of taskColumns) {
