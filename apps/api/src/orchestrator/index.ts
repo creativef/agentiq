@@ -115,8 +115,8 @@ class CEOOrchestrator {
       }
       if (actions.length > 0) console.log(`[CEO ${name}] ${ok} ok, ${fail} fail (${actions.length} actions)`);
 
-      // 8. CEO SELF-EXECUTION (The "Player-Coach" Loop)
-      await this.executeCEOInbox(companyId, name, ctx);
+      // 8. CEO SELF-EXECUTION DISABLED (Hermes handles execution)
+      // await this.executeCEOInbox(companyId, name, ctx);
 
     } catch (e: any) {
       console.error(`[CEO ${name}] tick error:`, e.message);

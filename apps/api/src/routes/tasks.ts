@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { tasks, agents, projects, companyMembers, companies } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
-import { executeTaskById } from "../task-execution";
+import { enqueueExecution } from "../execution/dispatcher";
 
 // ============================================================
 // REAL EXECUTION ENGINE
@@ -108,17 +108,23 @@ tasksRouter.post("/tasks/:taskId/reject", async (c) => {
 });
 
 // POST /tasks/:taskId/execute
+// Hermes execution only: enqueue task and return run id
 tasksRouter.post("/tasks/:taskId/execute", async (c) => {
   const taskId = c.req.param("taskId");
   const taskCheck = await db.select().from(tasks).where(sql`${tasks.id} = ${taskId}`).limit(1);
   if (taskCheck.length === 0) return c.json({ error: "Task not found" }, 404);
 
-  try {
-    const result = await executeTaskById(taskId);
-    return c.json({ success: result.success, steps: result.steps, result: result.result });
-  } catch (e: any) {
-    return c.json({ success: false, result: `Crashed: ${e.message}` }, 500);
-  }
+  const projectRow = await db.select({ companyId: projects.companyId })
+    .from(projects).where(sql`${projects.id} = ${taskCheck[0].projectId}`).limit(1);
+  if (projectRow.length === 0) return c.json({ error: "Project not found" }, 404);
+
+  const run = await enqueueExecution({
+    taskId,
+    agentId: taskCheck[0].agentId,
+    companyId: projectRow[0].companyId,
+  });
+
+  return c.json({ ok: true, run });
 });
 
 // PUT /tasks/:taskId

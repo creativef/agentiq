@@ -156,6 +156,30 @@ export const agentLogs = pgTable("agent_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Hermes Execution Runs
+export const executionRuns = pgTable("execution_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  companyId: uuid("company_id").notNull().references(() => companies.id),
+  taskId: uuid("task_id").notNull().references(() => tasks.id),
+  agentId: uuid("agent_id").references(() => agents.id),
+  provider: text("provider").default("hermes"),
+  status: text("status").default("queued"), // queued -> running -> completed/failed
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
+  result: text("result"),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const executionEvents = pgTable("execution_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  runId: uuid("run_id").notNull().references(() => executionRuns.id),
+  level: text("level").default("info"),
+  message: text("message").notNull(),
+  meta: text("meta"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const chatMessages = pgTable("chat_messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),

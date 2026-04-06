@@ -343,6 +343,38 @@ async function main() {
   `);
   console.log("  [OK] agent_logs");
 
+  // Hermes Execution Runs
+  console.log("\nCreating execution_runs table...");
+  await sql.unsafe(`
+    CREATE TABLE IF NOT EXISTS execution_runs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+      task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      agent_id UUID REFERENCES agents(id) ON DELETE SET NULL,
+      provider TEXT DEFAULT 'hermes',
+      status TEXT DEFAULT 'queued',
+      started_at TIMESTAMP,
+      finished_at TIMESTAMP,
+      result TEXT,
+      error TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("  [OK] execution_runs");
+
+  console.log("\nCreating execution_events table...");
+  await sql.unsafe(`
+    CREATE TABLE IF NOT EXISTS execution_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      run_id UUID NOT NULL REFERENCES execution_runs(id) ON DELETE CASCADE,
+      level TEXT DEFAULT 'info',
+      message TEXT NOT NULL,
+      meta TEXT,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  console.log("  [OK] execution_events");
+
   // Chat Messages Table
   console.log("\nCreating chat_messages table...");
   await sql.unsafe(`

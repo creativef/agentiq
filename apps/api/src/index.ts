@@ -19,6 +19,7 @@ import { data } from "./routes/data";
 import { connectorsRouter } from "./routes/connectors";
 import { goalsRouter } from "./routes/goals";
 import { projectsRouter } from "./routes/projects";
+import { executionsRouter } from "./routes/executions";
 import { auditMiddleware } from "./middleware/audit-log";
 import { skillsRouter } from "./routes/skills";
 
@@ -62,6 +63,7 @@ app.route("/api", connectorsRouter);
 app.route("/api", goalsRouter);
 app.route("/api", skillsRouter);
 app.route("/api", projectsRouter);
+app.route("/api", executionsRouter);
 
 app.notFound((c) => {
   return c.json({ error: "Not Found", path: c.req.path }, 404);

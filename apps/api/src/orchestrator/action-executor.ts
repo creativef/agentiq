@@ -9,6 +9,7 @@ import { logAgentActivity } from "../utils/agentLogger";
 import type { CEOContext, CEOAction } from "./types";
 import { executeCEOTool } from "./ceo-tools";
 import { executeEscalation } from "./escalation-engine";
+import { enqueueExecution } from "../execution/dispatcher";
 
 export async function executeAction(
   action: CEOAction,
@@ -30,16 +31,15 @@ export async function executeAction(
           `CEO assigned task. Skill match: ${matchPercentage.toFixed(0)}%. Reason: ${action.reason}`,
         );
 
-        // Auto-execute immediately
-        try {
-          const { executeTaskById } = await import("../task-execution");
-          await executeTaskById(taskId);
-        } catch (e: any) {
-          await db.update(tasks).set({ execStatus: "failed", status: "blocked", result: `Auto-execute failed: ${e.message}` })
-            .where(sql`${tasks.id} = ${taskId}`);
-        }
+        // Enqueue for Hermes execution
+        await enqueueExecution({
+          taskId,
+          agentId,
+          companyId: context.companyId,
+          payload: { reason: action.reason, matchPercentage },
+        });
 
-        return { success: true, detail: `Assigned task ${taskId.slice(0,8)}... to ${agentName}` };
+        return { success: true, detail: `Queued task ${taskId.slice(0,8)}... for Hermes` };
       }
 
       case "create_agent": {
@@ -161,16 +161,15 @@ export async function executeAction(
 
         await logAgentActivity(action.payload.agentId || "SYSTEM", taskId, "action", `Retried by CEO: ${action.reason}`);
 
-        // Auto-execute immediately
-        try {
-          const { executeTaskById } = await import("../task-execution");
-          await executeTaskById(taskId);
-        } catch (e: any) {
-          await db.update(tasks).set({ execStatus: "failed", status: "blocked", result: `Auto-execute failed: ${e.message}` })
-            .where(sql`${tasks.id} = ${taskId}`);
-        }
+        // Enqueue for Hermes execution
+        await enqueueExecution({
+          taskId,
+          agentId: action.payload.agentId || null,
+          companyId: context.companyId,
+          payload: { reason: action.reason, retry: true },
+        });
 
-        return { success: true, detail: `Retrying task ${taskId.slice(0,8)}...` };
+        return { success: true, detail: `Queued retry ${taskId.slice(0,8)}... for Hermes` };
       }
 
       case "reassign_task": {
