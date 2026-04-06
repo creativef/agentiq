@@ -158,9 +158,20 @@ async function executeTask(ctx: ExecutionContext): Promise<{ success: boolean; s
   if (ctx.agentSkills.length > 0) {
     steps.push({ agent: ctx.assignedAgent.name, action: "Skill applied", outcome: `Used: ${ctx.agentSkills.map(s => s.name).join(", ")}`, databaseChanges: changes });
   }
+
+  // STRUCTURED OUTPUT: Append JSON block for CEO parsing
+  const structuredResult = JSON.stringify({
+    status: "success",
+    task: ctx.taskTitle,
+    result: `Task completed. ${changes.join(", ")}`,
+    blockers: [],
+    next_steps: [],
+    files_created: [],
+  }, null, 2);
+
   return {
     success: true, steps,
-    report: `✅ TASK COMPLETED\n${steps.map(s => `• [${s.agent}] ${s.action}: ${s.outcome}`).join('\n')}`,
+    report: `✅ TASK COMPLETED\n${steps.map(s => `• [${s.agent}] ${s.action}: ${s.outcome}`).join('\n')}\n\n--- CEO PARSEABLE OUTPUT ---\n${structuredResult}`,
   };
 }
 

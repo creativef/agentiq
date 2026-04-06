@@ -51,7 +51,6 @@ export interface CompanyInfo {
   name: string;
   goal: string;
 }
-
 export interface CEOContext {
   companyId: string;
   company: CompanyInfo;

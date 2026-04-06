@@ -129,12 +129,34 @@ class CEOOrchestrator {
         this.lastReport.set(companyId, now);
       }
 
-      // 6 – execute all actions
+      // 6 – execute ALL CEO actions IN PARALLEL (up to 5 at once)
       this.tickCount++;
       let ok = 0, fail = 0;
-      for (const a of actions) {
-        const r = await executeAction(a, ctx);
-        if (r.success) ok++; else { fail++; console.error(`[CEO ${name}] FAIL ${a.type}: ${r.detail}`); }
+      
+      // Split actions into batches of 5 for safe parallel execution
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < actions.length; i += BATCH_SIZE) {
+        const batch = actions.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map(a => executeAction(a, ctx).then(r => ({ action: a, result: r })))
+        );
+        
+        for (const settled of results) {
+          if (settled.status === 'fulfilled' && settled.value.result.success) {
+            ok++;
+            console.log(`[CEO Tool OK] ${settled.value.action.type}: ${settled.value.result.detail}`);
+          } else {
+            fail++;
+            const detail = settled.status === 'rejected' ? settled.reason : settled.value.result.detail;
+            console.error(`[CEO FAIL] ${settled.status === 'rejected' ? 'error' : detail}`);
+          }
+        }
+      }
+
+      // Auto-execute tasks that are ready (if CEO assigned them this tick)
+      const newlyAssigned = actions.filter(a => a.type === 'assign_task' || (a.type === 'ceo_tool' && a.payload.tool === 'create_task'));
+      if (newlyAssigned.length > 0) {
+        console.log(`[CEO ${name}] Assigned ${newlyAssigned.length} new task(s) — next tick will auto-execute`);
       }
 
       if (actions.length > 0) console.log(`[CEO ${name}] ${ok} ok, ${fail} fail (${actions.length} actions)`);
