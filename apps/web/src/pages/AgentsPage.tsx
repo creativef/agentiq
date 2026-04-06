@@ -104,7 +104,7 @@ export default function AgentsPage() {
       body: JSON.stringify(body),
     });
     if (res.ok) {
-      setForm({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [], reportsTo: "" });
+      setForm({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [], reportsTo: "", altReportsTo: [] });
       fetchAgents();
       setShowForm(false);
     }
