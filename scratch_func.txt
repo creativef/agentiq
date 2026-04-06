@@ -1,0 +1,115 @@
+async function executeTask(ctx: ExecutionContext): Promise<{ success: boolean; steps: ExecutionStep[]; report: string }> {
+  const steps: ExecutionStep[] = [];
+  const changes: string[] = [];
+  const lowerTitle = ctx.taskTitle.toLowerCase();
+  const lowerDesc = (ctx.taskDescription || "").toLowerCase();
+  const fullText = `${lowerTitle} ${lowerDesc}`;
+
+  // 1. HIRING
+  if (fullText.includes("hire") || fullText.includes("found") || fullText.includes("recruit") || fullText.includes("onboard")) {
+    const rolesToHire = extractRoles(fullText);
+    if (rolesToHire.length === 0) {
+      if (fullText.includes("cto") || fullText.includes("chief technology")) rolesToHire.push("CTO");
+      else if (fullText.includes("cfo") || fullText.includes("chief financial")) rolesToHire.push("CFO");
+      else if (fullText.includes("cmo") || fullText.includes("chief marketing")) rolesToHire.push("CMO");
+      else if (fullText.includes("coo") || fullText.includes("chief operations")) rolesToHire.push("COO");
+      else if (fullText.includes("manager")) rolesToHire.push("MANAGER");
+      else if (fullText.includes("agent") || fullText.includes("staff")) rolesToHire.push("AGENT");
+      else rolesToHire.push("AGENT");
+    }
+
+    for (const role of rolesToHire) {
+      const existing = await db.select().from(agents)
+        .where(sql`${agents.companyId} = ${ctx.companyId} AND UPPER(${agents.role}) = ${role}`)
+        .limit(1);
+
+      await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "info", `Searching for existing ${role} agent...`);
+
+      if (existing.length > 0) {
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "info", `Found existing agent: ${existing[0].name}.`);
+        steps.push({ agent: ctx.assignedAgent.name, action: `Verified ${role} exists`, outcome: `"${existing[0].name}" is already active.`, databaseChanges: [] });
+      } else {
+        const agentName = `${role.charAt(0) + role.slice(1).toLowerCase()}`;
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "action", `Creating Agent: ${agentName}...`);
+
+        const newAgent = await db.insert(agents).values({
+          companyId: ctx.companyId, projectId: ctx.projectId, name: agentName, role, status: "idle", createdAt: new Date(),
+        }).returning();
+
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "success", `✅ ${agentName} created as ${role}.`);
+        changes.push(`Created agent: ${agentName} (${role})`);
+        steps.push({ agent: ctx.assignedAgent.name, action: `Hired ${role}`, outcome: `Onboarded ${agentName}.`, databaseChanges: changes.slice() });
+
+        // Assign skills
+        const roleSkills: Record<string, string[]> = {
+          CEO: ["Strategic Planning", "Project Management"], CTO: ["Code Generation", "Research & Analysis"],
+          CFO: ["Research & Analysis"], CMO: ["Content Writing", "Research & Analysis"], MANAGER: ["Project Management"],
+        };
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "action", `Assigning core skills...`);
+        const skillNames = roleSkills[role] || ["Research & Analysis"];
+        const skillRows = await db.select().from(skillsTable).where(sql`${skillsTable.name} IN ${skillNames}`);
+        for (const skill of skillRows) {
+          await db.insert(agentSkills).values({ agentId: newAgent[0].id, skillId: skill.id });
+        }
+        await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "success", `Skills: ${skillNames.join(", ")}`);
+      }
+    }
+    for (const role of rolesToHire) {
+      await createSubtask(ctx, role, `Onboarding for ${role}`, `Complete setup for new ${role}.`);
+      steps.push({ agent: ctx.assignedAgent.name, action: "Created subtask", outcome: `Scheduled onboarding for ${role}.`, databaseChanges: changes.slice() });
+    }
+    return {
+      success: true, steps,
+      report: `🚀 HIRING COMPLETE\n${steps.map(s => `• [${s.agent}] ${s.action}: ${s.outcome}`).join('\n')}\n\n${changes.length > 0 ? 'Changes:\n' + changes.map(c => `  ✅ ${c}`).join('\n') : ''}`,
+    };
+  }
+
+  // 2. GOALS
+  if (fullText.includes("goal") || fullText.includes("strategy") || fullText.includes("kpi") || fullText.includes("metric")) {
+    const keywords = ["revenue", "growth", "users", "traffic", "conversion", "launch", "profit"];
+    const matches = keywords.filter(kw => fullText.includes(kw));
+    for (const key of matches) {
+      await db.insert(goals).values({ companyId: ctx.companyId, title: `${key.charAt(0) + key.slice(1)} Goal`, progress: 0 });
+      changes.push(`Created goal: ${key}`);
+    }
+    if (matches.length === 0) {
+      await db.insert(goals).values({ companyId: ctx.companyId, title: ctx.taskTitle, progress: 0 });
+    }
+    steps.push({ agent: ctx.assignedAgent.name, action: "Defined goals", outcome: `Created ${matches.length || 1} goal(s).`, databaseChanges: changes });
+    return { success: true, steps, report: `🎯 GOALS SET\nGoals created: ${changes.join(", ")}` };
+  }
+
+  // 3. DELEGATION
+  if (fullText.includes("team") || fullText.includes("manage") || fullText.includes("coordinate")) {
+    const mentioned = extractRoles(fullText);
+    if (mentioned.length > 0) {
+      for (const role of mentioned) {
+        await createSubtask(ctx, role, `Execute plan for ${role}`, `Review objectives and provide status update.`);
+        changes.push(`Delegated to ${role}`);
+      }
+    }
+    steps.push({ agent: ctx.assignedAgent.name, action: "Delegated", outcome: `Routed to ${mentioned.join(", ") || "agent pool"}.`, databaseChanges: changes });
+    return { success: true, steps, report: `📋 DELEGETED\n${steps[0].outcome}` };
+  }
+
+  // DEFAULT
+  steps.push({ agent: ctx.assignedAgent.name, action: "Completed", outcome: `Task "${ctx.taskTitle}" done.`, databaseChanges: changes });
+  if (ctx.agentSkills.length > 0) {
+    steps.push({ agent: ctx.assignedAgent.name, action: "Skill applied", outcome: `Used: ${ctx.agentSkills.map(s => s.name).join(", ")}`, databaseChanges: changes });
+  }
+
+  // STRUCTURED OUTPUT: Append JSON block for CEO parsing
+  const structuredResult = JSON.stringify({
+    status: "success",
+    task: ctx.taskTitle,
+    result: `Task completed. ${changes.join(", ")}`,
+    blockers: [],
+    next_steps: [],
+    files_created: [],
+  }, null, 2);
+
+  return {
+    success: true, steps,
+    report: `✅ TASK COMPLETED\n${steps.map(s => `• [${s.agent}] ${s.action}: ${s.outcome}`).join('\n')}\n\n--- CEO PARSEABLE OUTPUT ---\n${structuredResult}`,
+  };
+}

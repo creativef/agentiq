@@ -13,6 +13,8 @@ import { assessTeam } from "./team-assessor";
 import { generateReport } from "./report-generator";
 import { executeAction } from "./action-executor";
 import { makeLLMDecisions } from "./llm-decider";
+import { runTaskExecution } from "../utils/task-runner";
+import { tasks, projects, agents, agentSkills, skills as skillsTable } from "../db/schema";
 import type { CEOAction } from "./types";
 import type { LLMProviderConfig } from "../llm/provider";
 
@@ -160,6 +162,65 @@ class CEOOrchestrator {
       }
 
       if (actions.length > 0) console.log(`[CEO ${name}] ${ok} ok, ${fail} fail (${actions.length} actions)`);
+
+      // 7 – CEO SELF-EXECUTION: Run any "Ready" tasks assigned to CEO
+      const ceoAgent = ctx.agents.find(a => a.role === 'CEO') || null;
+      if (ceoAgent) {
+        try {
+          const ceoReadyTasks = await db
+            .select({ id: tasks.id, title: tasks.title, description: tasks.description, scratchpad: tasks.scratchpad, projectId: tasks.projectId })
+            .from(tasks)
+            .leftJoin(projects, sql\`${tasks.projectId} = \${projects.id}\`)
+            .where(sql\`
+              \${tasks.agentId} = \${ceoAgent.id}
+              AND \${tasks.status} IN ('ready', 'in_progress')
+              AND \${tasks.execStatus} = 'ready'
+              AND \${projects.companyId} = \${companyId}
+            \`)
+            .limit(3); // Max 3 CEO tasks per tick
+
+          if (ceoReadyTasks.length > 0) {
+            console.log(`[CEO ${name}] Found ${ceoReadyTasks.length} task(s) to self-execute.`);
+          }
+
+          for (const t of ceoReadyTasks) {
+            try {
+              const skillRows = await db
+                .select({ name: skillsTable.name, category: skillsTable.category, instructions: skillsTable.instructions })
+                .from(agentSkills).innerJoin(skillsTable, sql\`${agentSkills.skillId} = \${skillsTable.id}\`)
+                .where(sql\`${agentSkills.agentId} = \${ceoAgent.id}\`);
+
+              await db.update(tasks).set({ execStatus: "executing", status: "in_progress" })
+                .where(sql\`${tasks.id} = \${t.id}\`);
+
+              const execResult = await runTaskExecution({
+                taskId: t.id,
+                taskTitle: t.title,
+                taskDescription: t.description || "",
+                assignedAgent: { id: ceoAgent.id, name: ceoAgent.name, role: ceoAgent.role },
+                companyId,
+                projectId: t.projectId || companyId,
+                agentSkills: skillRows,
+                scratchpad: t.scratchpad,
+              });
+
+              await db.update(tasks).set({
+                execStatus: execResult.success ? "completed" : "failed",
+                status: execResult.success ? "done" : "blocked",
+                result: execResult.report || "No output",
+              }).where(sql\`${tasks.id} = \${t.id}\`);
+
+              console.log(`[CEO-EXEC] ${execResult.success ? '✅' : '❌'} "${t.title}"`);
+            } catch (e: any) {
+              console.error(`[CEO-EXEC] ❌ Failed: ${t.title}`, e.message);
+              await db.update(tasks).set({ execStatus: "failed", status: "blocked", result: e.message })
+                .where(sql\`${tasks.id} = \${t.id}\`);
+            }
+          }
+        } catch (e: any) {
+          console.error(`[CEO-EXEC] Self-execution loop error:`, e.message);
+        }
+      }
 
     } catch (e: any) {
       console.error(`[CEO ${name}] tick error:`, e);
