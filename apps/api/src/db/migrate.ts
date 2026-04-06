@@ -199,6 +199,29 @@ async function main() {
     console.log(`  [SKIP] reports_to column: ${e.message.split('\n')[0]}`);
   }
 
+  // Add missing agent columns (safe for existing tables)
+  console.log("\nAdding agent columns (safe for existing tables)...");
+  const agentColumns = [
+    ['agents', 'platform', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS platform TEXT"],
+    ['agents', 'external_id', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS external_id TEXT"],
+    ['agents', 'heartbeat_interval', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS heartbeat_interval INTEGER DEFAULT 3600"],
+    ['agents', 'scratchpad', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS scratchpad TEXT"],
+    ['agents', 'cost_monthly', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS cost_monthly INTEGER DEFAULT 0"],
+    ['agents', 'budget_limit', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS budget_limit INTEGER"],
+    ['agents', 'last_heartbeat', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS last_heartbeat TIMESTAMP"],
+    ['agents', 'alt_reports_to', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS alt_reports_to UUID[]"],
+    ['agents', 'x_pos', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS x_pos INT"],
+    ['agents', 'y_pos', "ALTER TABLE agents ADD COLUMN IF NOT EXISTS y_pos INT"],
+  ];
+  for (const [tbl, col, stmt] of agentColumns) {
+    try {
+      await sql.unsafe(stmt);
+      console.log(`  [OK] ${tbl}.${col}`);
+    } catch (e: any) {
+      console.log(`  [SKIP] ${tbl}.${col}: ${e.message.split('\\n')[0]}`);
+    }
+  }
+
   console.log("\nAll tables ready!");
 
   // Add indexes on foreign keys and common query columns
@@ -274,6 +297,8 @@ async function main() {
     ['tasks', 'approval_status', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approval_status TEXT"],
     ['tasks', 'result', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS result TEXT"],
     ['tasks', 'retry_count', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS retry_count INT DEFAULT 0"],
+    ['tasks', 'assigned_by', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by TEXT"],
+    ['tasks', 'scratchpad', "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS scratchpad TEXT"],
   ];
 
   for (const [tbl, col, stmt] of taskColumns) {
