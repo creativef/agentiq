@@ -5,6 +5,7 @@ interface Agent {
   id: string;
   name: string;
   role: string;
+  projectId?: string | null;
 }
 
 interface Message {
@@ -22,7 +23,7 @@ export default function ChatJournal() {
   const { company } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null); // null = Team
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const lastFetch = useRef(0);
@@ -34,16 +35,20 @@ export default function ChatJournal() {
     if (!company) return;
     fetch(`/api/companies/${company.id}/agents`, { credentials: "include" })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setAgents(d?.agents || []))
+      .then(d => {
+        const list = d?.agents || [];
+        setAgents(list);
+        if (list.length > 0 && !selectedAgentId) {
+          setSelectedAgentId(list[0].id);
+        }
+      })
       .catch(console.error);
   }, [company]);
 
   // Fetch Messages
   const fetchMessages = useCallback(() => {
-    if (!company) return;
-    const url = selectedAgentId
-      ? `/api/chat?agentId=${selectedAgentId}`
-      : `/api/chat`;
+    if (!company || !selectedAgentId) return;
+    const url = `/api/chat?agentId=${selectedAgentId}`;
     
     fetch(url, { credentials: "include" })
       .then(r => r.ok ? r.json() : null)
@@ -59,14 +64,6 @@ export default function ChatJournal() {
     return () => clearInterval(interval);
   }, [fetchMessages]);
 
-  // Polling with debounce (don't poll right after manual fetch)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (Date.now() - lastFetch.current < 3000) return; // Skip if recently fetched
-      fetchMessages();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [fetchMessages]);
 
   // Detect if user is at bottom of chat
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -81,15 +78,100 @@ export default function ChatJournal() {
     }
   }, [messages.length]);
 
+  const formatStatus = (data: any) => {
+    const lines = [
+      `Agent: ${data.agent?.name || "Unknown"} (${data.agent?.role || ""})`,
+      `Last heartbeat: ${data.agent?.lastHeartbeat || "unknown"}`,
+      `Open tasks: ${data.openTasks ?? 0}`,
+      `Current task: ${data.currentTask ? `${data.currentTask.title} [${data.currentTask.execStatus}]` : "none"}`,
+      `Last log: ${data.lastLog ? `${data.lastLog.level}: ${data.lastLog.message}` : "none"}`,
+    ];
+    return lines.join("\n");
+  };
+
+  const handleStatus = async () => {
+    if (!selectedAgentId) return;
+    const res = await fetch(`/api/agents/${selectedAgentId}/status`, { credentials: "include" });
+    if (!res.ok) return;
+    const data = await res.json();
+    const systemMsg: Message = {
+      id: `status-${Date.now()}`,
+      content: formatStatus(data),
+      role: "system",
+      agentId: selectedAgentId,
+      userId: null,
+      createdAt: new Date().toISOString(),
+      agentName: "Status",
+      userEmail: null,
+    };
+    setMessages((prev) => [...prev, systemMsg]);
+  };
+
+  const handleAssignTask = async () => {
+    if (!selectedAgentId || !company || !input.trim()) return;
+    const agent = agents.find(a => a.id === selectedAgentId);
+    let projectId = agent?.projectId || null;
+
+    if (!projectId) {
+      const projRes = await fetch(`/api/companies/${company.id}/projects`, { credentials: "include" });
+      const projData = projRes.ok ? await projRes.json() : { projects: [] };
+      if (projData.projects?.length > 0) {
+        projectId = projData.projects[0].id;
+      } else {
+        const createRes = await fetch(`/api/companies/${company.id}/projects`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Chat Operations" }),
+        });
+        if (createRes.ok) {
+          const created = await createRes.json();
+          projectId = created.project?.id;
+        }
+      }
+    }
+
+    if (!projectId) return;
+
+    const taskRes = await fetch("/api/tasks", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId,
+        agentId: selectedAgentId,
+        title: `Task: ${input.trim().slice(0, 60)}`,
+        description: input.trim(),
+        priority: "medium",
+        requiresApproval: false,
+      }),
+    });
+    if (!taskRes.ok) return;
+    const taskData = await taskRes.json();
+    const taskId = taskData?.task?.id;
+    if (taskId) {
+      await fetch(`/api/tasks/${taskId}/execute`, { method: "POST", credentials: "include" });
+      const systemMsg: Message = {
+        id: `task-${Date.now()}`,
+        content: `Assigned task to agent. Task ID: ${taskId}`,
+        role: "system",
+        agentId: selectedAgentId,
+        userId: null,
+        createdAt: new Date().toISOString(),
+        agentName: "Task",
+        userEmail: null,
+      };
+      setMessages((prev) => [...prev, systemMsg]);
+      setInput("");
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !company || sending) return;
+    if (!input.trim() || !company || sending || !selectedAgentId) return;
     
     setSending(true);
     try {
-      // selectedAgentId = 'ALL' means Team Chat, otherwise specific agent ID
-      const agentIdToSend = selectedAgentId === "ALL" ? null : selectedAgentId;
-      
       const res = await fetch("/api/chat", {
         method: "POST",
         credentials: "include",
@@ -97,12 +179,12 @@ export default function ChatJournal() {
         body: JSON.stringify({
           companyId: company.id,
           content: input.trim(),
-          agentId: agentIdToSend,
+          agentId: selectedAgentId,
         }),
       });
       if (res.ok) {
         setInput("");
-        lastFetch.current = Date.now(); // Prevent poll from running immediately
+        lastFetch.current = Date.now();
         fetchMessages();
       }
     } finally {
@@ -111,9 +193,7 @@ export default function ChatJournal() {
   };
 
   // Determine current chat context
-  const chatLabel = selectedAgentId === "ALL" || !selectedAgentId
-    ? "🏢 Whole Team"
-    : agents.find(a => a.id === selectedAgentId)?.name || "Direct Message";
+  const chatLabel = agents.find(a => a.id === selectedAgentId)?.name || "Select Agent";
 
   const roleIcon = (msg: Message) => {
     if (msg.role === "user") return "👤 You";
@@ -127,8 +207,8 @@ export default function ChatJournal() {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <span style={{ fontSize: "0.8rem", color: "#9ca3af" }}>Compose to:</span>
           <select
-            value={selectedAgentId || "ALL"}
-            onChange={e => setSelectedAgentId(e.target.value === "ALL" ? null : e.target.value)}
+            value={selectedAgentId || ""}
+            onChange={e => setSelectedAgentId(e.target.value || null)}
             style={{
               background: "#1f2937",
               border: "1px solid #374151",
@@ -138,7 +218,7 @@ export default function ChatJournal() {
               fontSize: "0.85rem",
             }}
           >
-            <option value="ALL">🏢 Whole Team</option>
+            <option value="">Select agent</option>
             {agents.map(a => (
               <option key={a.id} value={a.id}>
                 {a.role === "FOUNDER" ? "🚀 " : a.role === "CEO" ? "👔 " : ""}{a.name}
@@ -189,13 +269,13 @@ export default function ChatJournal() {
       </div>
 
       {/* Input Area */}
-      <form onSubmit={handleSend} style={{ display: "flex", gap: "0.5rem" }}>
+      <form onSubmit={handleSend} style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
         <input
           autoFocus
           value={input}
           onChange={e => setInput(e.target.value)}
           placeholder={`Message ${chatLabel}...`}
-          disabled={sending || !company}
+          disabled={sending || !company || !selectedAgentId}
           style={{
             flex: 1,
             padding: "0.75rem 1rem",
@@ -207,8 +287,40 @@ export default function ChatJournal() {
           }}
         />
         <button
+          type="button"
+          onClick={handleStatus}
+          disabled={!selectedAgentId}
+          style={{
+            padding: "0.75rem 1rem",
+            background: "#374151",
+            border: "none",
+            color: "white",
+            borderRadius: "8px",
+            cursor: !selectedAgentId ? "not-allowed" : "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          Status
+        </button>
+        <button
+          type="button"
+          onClick={handleAssignTask}
+          disabled={!selectedAgentId || !input.trim()}
+          style={{
+            padding: "0.75rem 1rem",
+            background: "#10b981",
+            border: "none",
+            color: "white",
+            borderRadius: "8px",
+            cursor: !selectedAgentId || !input.trim() ? "not-allowed" : "pointer",
+            fontWeight: "bold",
+          }}
+        >
+          Assign Task
+        </button>
+        <button
           type="submit"
-          disabled={sending || !company || !input.trim()}
+          disabled={sending || !company || !input.trim() || !selectedAgentId}
           style={{
             padding: "0.75rem 1.5rem",
             background: "#3b82f6",

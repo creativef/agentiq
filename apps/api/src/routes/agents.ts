@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { companies, companyMembers, agents, tasks, projects, events, agentSkills } from "../db/schema";
+import { companies, companyMembers, agents, tasks, projects, events, agentSkills, agentLogs } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 
 const agentsRouter = new Hono();
@@ -113,6 +113,59 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
   }
 
   return c.json({ agent: result[0] });
+});
+
+// GET /agents/:agentId/status — data-only status
+agentsRouter.get("/agents/:agentId/status", async (c) => {
+  const agentId = c.req.param("agentId");
+  const user: UserPayload = c.get("user");
+
+  const agentCheck = await db.select({ id: agents.id, companyId: agents.companyId, name: agents.name, role: agents.role, lastHeartbeat: agents.lastHeartbeat })
+    .from(agents)
+    .where(sql`${agents.id} = ${agentId}`)
+    .limit(1);
+  if (agentCheck.length === 0) return c.json({ error: "Agent not found" }, 404);
+
+  const access = await db.select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${agentCheck[0].companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  const currentTask = await db
+    .select({ id: tasks.id, title: tasks.title, execStatus: tasks.execStatus, status: tasks.status, createdAt: tasks.createdAt })
+    .from(tasks)
+    .where(sql`${tasks.agentId} = ${agentId} AND ${tasks.execStatus} IN ('executing','ready','pending_approval','scheduled')`)
+    .orderBy(sql`CASE ${tasks.execStatus}
+      WHEN 'executing' THEN 1
+      WHEN 'ready' THEN 2
+      WHEN 'pending_approval' THEN 3
+      WHEN 'scheduled' THEN 4
+      ELSE 5 END`)
+    .limit(1);
+
+  const openCount = await db.select({ count: sql<number>`count(*)` })
+    .from(tasks)
+    .where(sql`${tasks.agentId} = ${agentId} AND ${tasks.execStatus} NOT IN ('completed','failed')`);
+
+  const lastLog = await db
+    .select({ createdAt: agentLogs.createdAt, level: agentLogs.level, message: agentLogs.message })
+    .from(agentLogs)
+    .where(sql`${agentLogs.agentId} = ${agentId}`)
+    .orderBy(sql`${agentLogs.createdAt} DESC`)
+    .limit(1);
+
+  return c.json({
+    agent: {
+      id: agentCheck[0].id,
+      name: agentCheck[0].name,
+      role: agentCheck[0].role,
+      lastHeartbeat: agentCheck[0].lastHeartbeat,
+    },
+    currentTask: currentTask[0] || null,
+    openTasks: openCount[0]?.count || 0,
+    lastLog: lastLog[0] || null,
+  });
 });
 
 // PUT /agents/:agentId
