@@ -259,3 +259,39 @@ export async function executeTaskById(taskId: string): Promise<{ success: boolea
 
   return { success: result.success, steps: result.steps, result: result.report };
 }
+
+// Background worker: execute ready tasks
+export function startTaskWorker(intervalMs = 5000) {
+  setInterval(async () => {
+    try {
+      const readyTasks = await db.select({ id: tasks.id })
+        .from(tasks)
+        .where(sql`
+          ${tasks.execStatus} = 'ready'
+          AND (${tasks.approvalStatus} IS NULL OR ${tasks.approvalStatus} = 'approved')
+          AND (${tasks.scheduledAt} IS NULL OR ${tasks.scheduledAt} <= NOW())
+        `)
+        .limit(5);
+
+      for (const t of readyTasks) {
+        const updated = await db.update(tasks)
+          .set({ execStatus: 'executing' })
+          .where(sql`${tasks.id} = ${t.id} AND ${tasks.execStatus} = 'ready'`)
+          .returning({ id: tasks.id });
+        if (updated.length === 0) continue;
+
+        try {
+          await executeTaskById(t.id);
+        } catch (e: any) {
+          await db.update(tasks).set({
+            execStatus: "failed",
+            status: "blocked",
+            result: `Worker execution failed: ${e.message || "Unknown error"}`,
+          }).where(sql`${tasks.id} = ${t.id}`);
+        }
+      }
+    } catch (e: any) {
+      console.error("[TaskWorker] Error:", e.message);
+    }
+  }, intervalMs);
+}
