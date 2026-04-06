@@ -1,14 +1,9 @@
-// ============================================================
-// Shared Task Runner
-// Used by both API routes and the CEO Orchestrator
-// ============================================================
-
-import { db } from "../db/client";
 import { sql } from "drizzle-orm";
-import { agents, tasks, agentSkills, skills as skillsTable, goals } from "../db/schema";
-import { logAgentActivity } from "./agentLogger";
+import { db } from "./db/client";
+import { tasks, agents, projects, companyMembers, goals, agentSkills, skills as skillsTable, chatMessages } from "./db/schema";
+import { logAgentActivity } from "./utils/agentLogger";
 
-export interface ExecutionContext {
+interface ExecutionContext {
   taskId: string;
   taskTitle: string;
   taskDescription: string;
@@ -16,7 +11,7 @@ export interface ExecutionContext {
   companyId: string;
   projectId: string;
   agentSkills: Array<{ name: string; category: string; instructions: string }>;
-  scratchpad: string | null;   // Shared context from CEO/parent
+  scratchpad: string | null;
 }
 
 interface ExecutionStep {
@@ -58,7 +53,7 @@ async function createSubtask(ctx: ExecutionContext, role: string, title: string,
   });
 }
 
-export async function runTaskExecution(ctx: ExecutionContext): Promise<{ success: boolean; steps: ExecutionStep[]; report: string }> {
+async function executeTask(ctx: ExecutionContext): Promise<{ success: boolean; steps: ExecutionStep[]; report: string }> {
   const steps: ExecutionStep[] = [];
   const changes: string[] = [];
   const lowerTitle = ctx.taskTitle.toLowerCase();
@@ -92,21 +87,8 @@ export async function runTaskExecution(ctx: ExecutionContext): Promise<{ success
         const agentName = `${role.charAt(0) + role.slice(1).toLowerCase()}`;
         await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "action", `Creating Agent: ${agentName}...`);
 
-        // Determine reporting and heartbeat based on role
-        const managerKeywords = ["MANAGER", "VP", "DIRECTOR", "HEAD", "CHIEF"];
-        const isManager = managerKeywords.some(kw => role.toUpperCase().includes(kw));
-        const heartbeatInterval = isManager ? 1800 : 3600; // Managers: 30m, Agents: 1h
-        const reportsTo = ctx.assignedAgent.id || null; // Auto-report to creator (usually CEO)
-
         const newAgent = await db.insert(agents).values({
-          companyId: ctx.companyId,
-          projectId: ctx.projectId,
-          name: agentName,
-          role,
-          status: "idle",
-          heartbeatInterval,
-          reportsTo,
-          createdAt: new Date(),
+          companyId: ctx.companyId, projectId: ctx.projectId, name: agentName, role, status: "idle", createdAt: new Date(),
         }).returning();
 
         await logAgentActivity(ctx.assignedAgent.id, ctx.taskId, "success", `✅ ${agentName} created as ${role}.`);
@@ -185,4 +167,85 @@ export async function runTaskExecution(ctx: ExecutionContext): Promise<{ success
     success: true, steps,
     report: `✅ TASK COMPLETED\n${steps.map(s => `• [${s.agent}] ${s.action}: ${s.outcome}`).join('\n')}\n\n--- CEO PARSEABLE OUTPUT ---\n${structuredResult}`,
   };
+}
+
+export async function executeTaskById(taskId: string): Promise<{ success: boolean; steps: ExecutionStep[]; result: string }> {
+  const taskCheck = await db.select().from(tasks).where(sql`${tasks.id} = ${taskId}`).limit(1);
+  if (taskCheck.length === 0) {
+    throw new Error("Task not found");
+  }
+  const task = taskCheck[0];
+
+  let assignedAgentData = null;
+  if (task.agentId) {
+    const ag = await db.select().from(agents).where(sql`${agents.id} = ${task.agentId}`).limit(1);
+    if (ag.length > 0) assignedAgentData = ag[0];
+  }
+
+  let agentSkillList: Array<{ name: string; category: string; instructions: string }> = [];
+  if (task.agentId) {
+    const skillRows = await db
+      .select({ name: skillsTable.name, category: skillsTable.category, instructions: skillsTable.instructions })
+      .from(agentSkills).innerJoin(skillsTable, sql`${agentSkills.skillId} = ${skillsTable.id}`)
+      .where(sql`${agentSkills.agentId} = ${task.agentId}`);
+    agentSkillList = skillRows;
+  }
+
+  const projCheck = await db.select({ companyId: projects.companyId, id: projects.id })
+    .from(projects).where(sql`${projects.id} = ${task.projectId}`).limit(1);
+
+  let companyId: string;
+  let projectId: string;
+  if (projCheck.length > 0) {
+    companyId = projCheck[0].companyId;
+    projectId = projCheck[0].id || projCheck[0].companyId;
+  } else {
+    const companyCheck = await db.select({ companyId: companyMembers.companyId })
+      .from(companyMembers).where(sql`${companyMembers.userId} = ${task.assignedBy}`).limit(1);
+    if (companyCheck.length === 0) throw new Error("No company found");
+    companyId = companyCheck[0].companyId;
+    projectId = companyCheck[0].companyId;
+  }
+
+  const execContext: ExecutionContext = {
+    taskId,
+    taskTitle: task.title,
+    taskDescription: task.description || "",
+    assignedAgent: assignedAgentData || { id: "", name: "System", role: "SYSTEM" },
+    companyId,
+    projectId,
+    agentSkills: agentSkillList,
+    scratchpad: task.scratchpad || null,
+  };
+
+  await db.update(tasks).set({ execStatus: "executing" }).where(sql`${tasks.id} = ${taskId}`);
+  await logAgentActivity(execContext.assignedAgent.id, taskId, "info", `🚀 Starting: "${task.title}"`);
+
+  const result = await executeTask(execContext);
+
+  await db.update(tasks).set({
+    execStatus: result.success ? "completed" : "failed",
+    status: result.success ? "done" : "blocked",
+    result: result.report,
+  }).where(sql`${tasks.id} = ${taskId}`);
+
+  // Chat integration: reply back to user for chat tasks
+  try {
+    if (task.title.toLowerCase().startsWith("chat:")) {
+      const replyToUser = task.assignedBy;
+      if (replyToUser) {
+        await db.insert(chatMessages).values({
+          companyId: companyId,
+          agentId: task.agentId || null,
+          userId: replyToUser,
+          content: result.success ? `✅ Done: ${result.report}` : `⚠️ ${result.report}`,
+          role: "agent",
+        });
+      }
+    }
+  } catch (replyErr: any) {
+    console.error("[Task] Failed to send chat reply:", replyErr.message);
+  }
+
+  return { success: result.success, steps: result.steps, result: result.report };
 }

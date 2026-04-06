@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { tasks, agents, projects, companyMembers, companies, agentSkills, skills as skillsTable, agentLogs, chatMessages } from "../db/schema";
+import { tasks, agents, projects, companyMembers, companies } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
-import { logAgentActivity } from "../utils/agentLogger";
-import { runTaskExecution, ExecutionContext } from "../utils/task-runner";
+import { executeTaskById } from "../task-execution";
 
 // ============================================================
 // REAL EXECUTION ENGINE
