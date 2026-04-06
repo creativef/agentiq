@@ -4,7 +4,7 @@
 
 import { db } from "../db/client";
 import { sql } from "drizzle-orm";
-import { agents, tasks, events } from "../db/schema";
+import { agents, tasks, events, projects, skills, agentSkills } from "../db/schema";
 import { logAgentActivity } from "../utils/agentLogger";
 import type { CEOContext, CEOAction } from "./types";
 import { executeCEOTool } from "./ceo-tools";
@@ -42,24 +42,109 @@ export async function executeAction(
       }
 
       case "create_agent": {
-        // Log as a recommendation — auto-hiring requires founder approval for now
-        await logAgentActivity(
-          "SYSTEM",
-          null,
-          "info",
-          `CEO recommends creating agent: ${action.payload.suggestedRole}. Reason: ${action.reason}`,
-        );
-        return { success: true, detail: `Logged hiring recommendation for ${action.payload.suggestedRole}` };
+        const role = (action.payload.suggestedRole || "Agent").toString();
+        const roleKey = role.toUpperCase();
+        const name = action.payload.name || role;
+
+        const projectRow = await db.select({ id: projects.id })
+          .from(projects)
+          .where(sql`${projects.companyId} = ${context.companyId}`)
+          .limit(1);
+        const projectId = projectRow[0]?.id || null;
+
+        const ceo = await db.select({ id: agents.id })
+          .from(agents)
+          .where(sql`${agents.companyId} = ${context.companyId} AND ${agents.role} = 'CEO'`)
+          .limit(1);
+        const founders = await db.select({ id: agents.id })
+          .from(agents)
+          .where(sql`${agents.companyId} = ${context.companyId} AND ${agents.role} = 'FOUNDER'`);
+
+        const isCEO = roleKey.includes("CEO");
+        const reportsTo = !isCEO ? (ceo[0]?.id || null) : null;
+        const altReportsTo = isCEO && founders.length > 0 ? founders.map(f => f.id) : null;
+
+        const created = await db.insert(agents).values({
+          companyId: context.companyId,
+          projectId,
+          name,
+          role,
+          status: "idle",
+          reportsTo,
+          altReportsTo,
+        }).returning();
+
+        const roleSkills: Record<string, string[]> = {
+          CEO: ["Strategic Planning", "Project Management"],
+          CTO: ["Code Generation", "Research & Analysis"],
+          CFO: ["Research & Analysis"],
+          CMO: ["Content Writing", "Research & Analysis"],
+          MANAGER: ["Project Management"],
+        };
+        const fromRole = roleSkills[roleKey] || ["Research & Analysis"];
+        const fromPayload = Array.isArray(action.payload.requiredSkills) ? action.payload.requiredSkills : [];
+        const skillNames = Array.from(new Set([...fromRole, ...fromPayload]));
+
+        if (skillNames.length > 0) {
+          const skillRows = await db.select({ id: skills.id, name: skills.name })
+            .from(skills)
+            .where(sql`${skills.name} IN ${skillNames}`);
+
+          const skillIds = skillRows.map(s => s.id);
+          if (skillIds.length > 0) {
+            const existing = await db.select({ skillId: agentSkills.skillId })
+              .from(agentSkills)
+              .where(sql`${agentSkills.agentId} = ${created[0].id} AND ${agentSkills.skillId} IN ${skillIds}`);
+
+            const existingIds = new Set(existing.map(e => e.skillId));
+            const toInsert = skillIds.filter(id => !existingIds.has(id)).map(skillId => ({
+              agentId: created[0].id,
+              skillId,
+            }));
+
+            if (toInsert.length > 0) await db.insert(agentSkills).values(toInsert);
+          }
+        }
+
+        await logAgentActivity("SYSTEM", null, "success", `Created agent ${created[0].name} (${role})`);
+        return { success: true, detail: `Created agent ${created[0].name} (${role})` };
       }
 
       case "assign_bundle_to_agent": {
-        await logAgentActivity(
-          action.payload.agentId,
-          null,
-          "info",
-          `CEO flagged for skill bundling: ${action.reason}`,
-        );
-        return { success: true, detail: `Flagged agent ${action.payload.agentName} for skill assignment` };
+        const agentId = action.payload.agentId;
+        const agentRow = await db.select({ id: agents.id, role: agents.role, name: agents.name })
+          .from(agents)
+          .where(sql`${agents.id} = ${agentId}`)
+          .limit(1);
+        if (agentRow.length === 0) return { success: false, detail: "Agent not found" };
+
+        const roleKey = (action.payload.role || agentRow[0].role || "AGENT").toString().toUpperCase();
+        const roleSkills: Record<string, string[]> = {
+          CEO: ["Strategic Planning", "Project Management"],
+          CTO: ["Code Generation", "Research & Analysis"],
+          CFO: ["Research & Analysis"],
+          CMO: ["Content Writing", "Research & Analysis"],
+          MANAGER: ["Project Management"],
+          AGENT: ["Research & Analysis"],
+        };
+        const skillNames = roleSkills[roleKey] || ["Research & Analysis"];
+
+        const skillRows = await db.select({ id: skills.id, name: skills.name })
+          .from(skills)
+          .where(sql`${skills.name} IN ${skillNames}`);
+
+        const skillIds = skillRows.map(s => s.id);
+        if (skillIds.length > 0) {
+          const existing = await db.select({ skillId: agentSkills.skillId })
+            .from(agentSkills)
+            .where(sql`${agentSkills.agentId} = ${agentId} AND ${agentSkills.skillId} IN ${skillIds}`);
+          const existingIds = new Set(existing.map(e => e.skillId));
+          const toInsert = skillIds.filter(id => !existingIds.has(id)).map(skillId => ({ agentId, skillId }));
+          if (toInsert.length > 0) await db.insert(agentSkills).values(toInsert);
+        }
+
+        await logAgentActivity(agentId, null, "info", `Assigned default skill bundle for ${roleKey}`);
+        return { success: true, detail: `Assigned default bundle to ${agentRow[0].name}` };
       }
 
       case "retry_task": {

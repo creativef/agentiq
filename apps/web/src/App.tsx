@@ -23,53 +23,55 @@ const ProtectedRoute = () => {
   return user ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
-const AuthedApp = () => (
-  <Routes>
-    <Route index element={<Navigate to="/dashboard" replace />} />
-    <Route path="dashboard" element={<DashboardLayout />}>
-      <Route index element={<DashboardPage />} />
-    </Route>
-    <Route path="tasks" element={<DashboardLayout />}>
-      <Route index element={<TaskBoard />} />
-    </Route>
-    <Route path="agents" element={<DashboardLayout />}>
-      <Route index element={<AgentsPage />} />
-    </Route>
-    <Route path="projects" element={<DashboardLayout />}>
-      <Route index element={<ProjectsPage />} />
-    </Route>
-    <Route path="history" element={<DashboardLayout />}>
-      <Route index element={<TaskHistory />} />
-    </Route>
-    <Route path="brief" element={<DashboardLayout />}>
-      <Route index element={<CompanyBriefsPage />} />
-    </Route>
-    <Route path="brain" element={<DashboardLayout />}>
-      <Route index element={<LLMConfigPage />} />
-    </Route>
-    <Route path="calendar" element={<DashboardLayout />}>
-      <Route index element={<CalendarMeetings />} />
-    </Route>
-    <Route path="files" element={<DashboardLayout />}>
-      <Route index element={<FileHub />} />
-    </Route>
-    <Route path="chat" element={<DashboardLayout />}>
-      <Route index element={<ChatJournal />} />
-    </Route>
-    <Route path="journal" element={<DashboardLayout />}>
-      <Route index element={<JournalPage />} />
-    </Route>
-    <Route path="org" element={<DashboardLayout />}>
-      <Route index element={<CompanyOrg />} />
-    </Route>
-    <Route path="company" element={<DashboardLayout />}>
-      <Route index element={<CompanySettings />} />
-    </Route>
-    <Route path="integrations" element={<DashboardLayout />}>
-      <Route index element={<ConnectorsPage />} />
-    </Route>
-  </Routes>
-);
+function AuthedApp() {
+  return (
+    <Routes>
+      <Route index element={<Navigate to="/dashboard" replace />} />
+      <Route path="dashboard" element={<DashboardLayout />}>
+        <Route index element={<DashboardPage />} />
+      </Route>
+      <Route path="tasks" element={<DashboardLayout />}>
+        <Route index element={<TaskBoard />} />
+      </Route>
+      <Route path="agents" element={<DashboardLayout />}>
+        <Route index element={<AgentsPage />} />
+      </Route>
+      <Route path="projects" element={<DashboardLayout />}>
+        <Route index element={<ProjectsPage />} />
+      </Route>
+      <Route path="history" element={<DashboardLayout />}>
+        <Route index element={<TaskHistory />} />
+      </Route>
+      <Route path="brief" element={<DashboardLayout />}>
+        <Route index element={<CompanyBriefsPage />} />
+      </Route>
+      <Route path="brain" element={<DashboardLayout />}>
+        <Route index element={<LLMConfigPage />} />
+      </Route>
+      <Route path="calendar" element={<DashboardLayout />}>
+        <Route index element={<CalendarMeetings />} />
+      </Route>
+      <Route path="files" element={<DashboardLayout />}>
+        <Route index element={<FileHub />} />
+      </Route>
+      <Route path="chat" element={<DashboardLayout />}>
+        <Route index element={<ChatJournal />} />
+      </Route>
+      <Route path="journal" element={<DashboardLayout />}>
+        <Route index element={<JournalPage />} />
+      </Route>
+      <Route path="org" element={<DashboardLayout />}>
+        <Route index element={<CompanyOrg />} />
+      </Route>
+      <Route path="company" element={<DashboardLayout />}>
+        <Route index element={<CompanySettings />} />
+      </Route>
+      <Route path="integrations" element={<DashboardLayout />}>
+        <Route index element={<ConnectorsPage />} />
+      </Route>
+    </Routes>
+  );
+}
 
 function App() {
   return (
