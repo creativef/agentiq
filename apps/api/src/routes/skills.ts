@@ -14,6 +14,29 @@ skillsRouter.get("/skills", async (c) => {
   return c.json({ skills: rows });
 });
 
+// POST /skills — create a new skill template
+skillsRouter.post("/skills", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  if (!body.name || !body.category || !body.instructions) {
+    return c.json({ error: "name, category, and instructions are required" }, 400);
+  }
+
+  const existing = await db.select().from(skills).where(sql`${skills.name} = ${body.name}`).limit(1);
+  if (existing.length > 0) {
+    return c.json({ error: "Skill already exists" }, 400);
+  }
+
+  const created = await db.insert(skills).values({
+    name: body.name,
+    category: body.category,
+    description: body.description || null,
+    instructions: body.instructions,
+    icon: body.icon || null,
+  }).returning();
+
+  return c.json({ skill: created[0] });
+});
+
 // GET /agents/:agentId/skills — get skills for a specific agent
 skillsRouter.get("/agents/:agentId/skills", async (c) => {
   const agentId = c.req.param("agentId");

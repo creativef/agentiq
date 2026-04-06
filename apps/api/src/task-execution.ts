@@ -198,13 +198,33 @@ export async function executeTaskById(taskId: string): Promise<{ success: boolea
   let projectId: string;
   if (projCheck.length > 0) {
     companyId = projCheck[0].companyId;
-    projectId = projCheck[0].id || projCheck[0].companyId;
+    projectId = projCheck[0].id;
   } else {
-    const companyCheck = await db.select({ companyId: companyMembers.companyId })
-      .from(companyMembers).where(sql`${companyMembers.userId} = ${task.assignedBy}`).limit(1);
-    if (companyCheck.length === 0) throw new Error("No company found");
-    companyId = companyCheck[0].companyId;
-    projectId = companyCheck[0].companyId;
+    // Resolve companyId from agent or assignedBy
+    if (task.agentId) {
+      const agentCompany = await db.select({ companyId: agents.companyId })
+        .from(agents).where(sql`${agents.id} = ${task.agentId}`).limit(1);
+      if (agentCompany.length > 0) companyId = agentCompany[0].companyId;
+    }
+    if (!companyId) {
+      const companyCheck = await db.select({ companyId: companyMembers.companyId })
+        .from(companyMembers).where(sql`${companyMembers.userId} = ${task.assignedBy}`).limit(1);
+      if (companyCheck.length === 0) throw new Error("No company found");
+      companyId = companyCheck[0].companyId;
+    }
+
+    // Ensure a valid project for the company
+    const proj = await db.select({ id: projects.id })
+      .from(projects).where(sql`${projects.companyId} = ${companyId}`).limit(1);
+    if (proj.length > 0) {
+      projectId = proj[0].id;
+    } else {
+      const created = await db.insert(projects).values({ companyId, name: "General Operations" }).returning({ id: projects.id });
+      projectId = created[0].id;
+    }
+
+    // Backfill task.projectId if missing/invalid
+    await db.update(tasks).set({ projectId }).where(sql`${tasks.id} = ${taskId}`);
   }
 
   const execContext: ExecutionContext = {
@@ -275,7 +295,7 @@ export function startTaskWorker(intervalMs = 5000) {
 
       for (const t of readyTasks) {
         const updated = await db.update(tasks)
-          .set({ execStatus: 'executing' })
+          .set({ execStatus: 'executing', status: 'in_progress' })
           .where(sql`${tasks.id} = ${t.id} AND ${tasks.execStatus} = 'ready'`)
           .returning({ id: tasks.id });
         if (updated.length === 0) continue;

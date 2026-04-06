@@ -185,6 +185,24 @@ class CEOOrchestrator {
 
         console.log(`[CEO ${name}] Executing task: "${t.title}"...`);
 
+        // Ensure a valid projectId
+        let resolvedProjectId = t.projectId || null;
+        if (!resolvedProjectId) {
+          const proj = await db.select({ id: projects.id })
+            .from(projects)
+            .where(eq(projects.companyId, companyId))
+            .limit(1);
+          if (proj.length > 0) {
+            resolvedProjectId = proj[0].id;
+          } else {
+            const created = await db.insert(projects)
+              .values({ companyId, name: "General Operations" })
+              .returning({ id: projects.id });
+            resolvedProjectId = created[0].id;
+          }
+          await db.update(tasks).set({ projectId: resolvedProjectId }).where(eq(tasks.id, t.id));
+        }
+
         // Run the execution engine
         const result = await runTaskExecution({
           taskId: t.id,
@@ -192,7 +210,7 @@ class CEOOrchestrator {
           taskDescription: t.description || "",
           assignedAgent: { id: ceoAgent.id, name: ceoAgent.name, role: ceoAgent.role },
           companyId,
-          projectId: t.projectId || companyId,
+          projectId: resolvedProjectId,
           agentSkills: skillRows,
           scratchpad: t.scratchpad,
         });

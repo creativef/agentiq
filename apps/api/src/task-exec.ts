@@ -1,3 +1,5 @@
+// DEPRECATED: legacy task executor. Not wired into server.ts (use task-execution.ts + orchestrator).
+// Kept temporarily for reference; safe to remove in next cleanup.
 import { sql } from "drizzle-orm";
 import { db } from "./db/client";
 import { agents, tasks, projects } from "./db/schema";

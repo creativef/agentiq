@@ -160,7 +160,7 @@ function mapToAction(decision: Record<string, any>): CEOAction | null {
   if (action === "create_agent" && decision.role) {
     return {
       type: "create_agent" as ActionTypeName,
-      payload: { role: decision.role, skills: decision.skills || [] },
+      payload: { suggestedRole: decision.role, requiredSkills: decision.skills || [] },
       reason,
       confidence: "medium",
     };

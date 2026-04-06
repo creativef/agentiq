@@ -76,6 +76,18 @@ export default function CompanyOrg() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
+  const handleNodeDragStop = useCallback(async (_: any, node: any) => {
+    if (!company) return;
+    try {
+      await fetch(`/api/agents/${node.id}`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ xPos: Math.round(node.position.x), yPos: Math.round(node.position.y) }),
+      });
+    } catch {}
+  }, [company]);
+
   // Fetch tree
   useEffect(() => {
     if (!company) return;
@@ -98,9 +110,15 @@ export default function CompanyOrg() {
                          node.role === "CEO" ? CEO_STYLE : 
                          node.role === "MANAGER" ? MANAGER_STYLE : AGENT_STYLE;
 
+            const storedX = (node as any).xPos;
+            const storedY = (node as any).yPos;
+            const position = (storedX !== null && storedX !== undefined && storedY !== null && storedY !== undefined)
+              ? { x: storedX, y: storedY }
+              : { x: xPos + (depth * 150), y };
+
             newNodes.push({
               id: node.id,
-              position: { x: xPos + (depth * 150), y },
+              position,
               type: "default",
               data: { label: `${roleIcon(node.role)}${node.name}`, subLabel: node.role },
               style: style,
@@ -166,6 +184,7 @@ export default function CompanyOrg() {
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onNodeDragStop={handleNodeDragStop}
           fitView
           fitViewOptions={{ padding: 0.2 }}
           style={{ background: "#0f172a" }}

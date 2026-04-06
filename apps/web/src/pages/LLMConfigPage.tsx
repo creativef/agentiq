@@ -144,7 +144,7 @@ export default function LLMConfigPage() {
         <div>
           <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", margin: 0 }}>CEO Intelligence</h1>
           <p style={{ fontSize: "0.85rem", color: "#9ca3af", margin: "4px 0 0" }}>
-            ⚡ <strong>Hermes</strong> is your primary CEO brain (zero cost). Add extension providers below for fallback or specialized reasoning.
+            ⚡ <strong>Hermes</strong> runs the always-on rule-based orchestrator. Add an LLM provider below to enable LLM-driven decisions.
           </p>
         </div>
         <button
@@ -161,7 +161,7 @@ export default function LLMConfigPage() {
         <div>
           <strong style={{ fontSize: "1rem", color: "#e5e7eb" }}>Hermes Agent</strong>
           <span style={{ marginLeft: "8px", padding: "2px 8px", background: "#052e16", color: "#22c55e", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>PRIMARY</span>
-          <div style={{ fontSize: "0.8rem", color: "#9ca3af", marginTop: "2px" }}>Your main CEO brain. Already configured. No extra setup needed.</div>
+          <div style={{ fontSize: "0.8rem", color: "#9ca3af", marginTop: "2px" }}>Always-on rule-based orchestration. Add an LLM provider to enable LLM-driven decisions.</div>
         </div>
       </div>
 

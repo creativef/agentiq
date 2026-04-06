@@ -50,11 +50,11 @@ export async function buildCEOContext(companyId: string): Promise<CEOContext> {
     .select({ agentId: tasks.agentId, status: tasks.status })
     .from(tasks)
     .leftJoin(projects, sql`${tasks.projectId} = ${projects.id}`)
-    .where(sql`(${projects.companyId} = ${companyId}) AND (${tasks.status} = 'in_progress' OR ${tasks.status} = 'failed')`)) {
+    .where(sql`(${projects.companyId} = ${companyId}) AND (${tasks.status} = 'in_progress' OR ${tasks.status} = 'failed' OR ${tasks.status} = 'blocked')`)) {
     const agent = agentMap.get(taskRow.agentId!);
     if (!agent) continue;
     if (taskRow.status === "in_progress") agent.activeTaskCount++;
-    if (taskRow.status === "failed") agent.failedTaskCount++;
+    if (taskRow.status === "failed" || taskRow.status === "blocked") agent.failedTaskCount++;
   }
 
   const agentsList = [...agentMap.values()];

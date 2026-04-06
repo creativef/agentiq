@@ -8,6 +8,7 @@ import { agents, tasks, events, projects, skills, agentSkills } from "../db/sche
 import { logAgentActivity } from "../utils/agentLogger";
 import type { CEOContext, CEOAction } from "./types";
 import { executeCEOTool } from "./ceo-tools";
+import { executeEscalation } from "./escalation-engine";
 
 export async function executeAction(
   action: CEOAction,
@@ -42,7 +43,7 @@ export async function executeAction(
       }
 
       case "create_agent": {
-        const role = (action.payload.suggestedRole || "Agent").toString();
+        const role = (action.payload.suggestedRole || action.payload.role || "Agent").toString();
         const roleKey = role.toUpperCase();
         const name = action.payload.name || role;
 
@@ -82,7 +83,11 @@ export async function executeAction(
           MANAGER: ["Project Management"],
         };
         const fromRole = roleSkills[roleKey] || ["Research & Analysis"];
-        const fromPayload = Array.isArray(action.payload.requiredSkills) ? action.payload.requiredSkills : [];
+        const fromPayload = Array.isArray(action.payload.requiredSkills)
+          ? action.payload.requiredSkills
+          : Array.isArray(action.payload.skills)
+            ? action.payload.skills
+            : [];
         const skillNames = Array.from(new Set([...fromRole, ...fromPayload]));
 
         if (skillNames.length > 0) {
@@ -179,12 +184,7 @@ export async function executeAction(
       }
 
       case "escalate_to_founders": {
-        await db.insert(events).values({
-          companyId: context.companyId,
-          type: "escalation",
-          actor: "CEO",
-          description: action.payload.reason || "Task escalation",
-        }).catch((e) => console.error("Failed to write escalation event:", e));
+        await executeEscalation(action, context.companyId);
         return { success: true, detail: `Escalated to founders` };
       }
 

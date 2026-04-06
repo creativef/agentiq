@@ -31,7 +31,19 @@ connectorsRouter.get("/connectors", async (c) => {
     .innerJoin(companies, sql`${connectorsTable.companyId} = ${companies.id}`)
     .where(sql`${companyMembers.userId} = ${user.userId}`)
     .orderBy(connectorsTable.createdAt);
-  return c.json({ connectors: rows });
+
+  const connectors = rows.map((r) => {
+    let parsed: any = null;
+    try { parsed = r.config ? JSON.parse(r.config) : null; } catch {}
+    return {
+      ...r,
+      config: parsed,
+      enabled: r.status !== "disabled",
+      apiUrl: parsed?.apiUrl || null,
+    };
+  });
+
+  return c.json({ connectors });
 });
 
 // POST /connectors/:platform/connect
@@ -47,7 +59,46 @@ connectorsRouter.post("/connectors/:platform/connect", async (c) => {
   if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
   const webhookSecret = crypto.randomUUID();
   const [connector] = await db.insert(connectorsTable).values({ companyId, platform, config: JSON.stringify({ webhookSecret, apiUrl: body.apiUrl }), status: "connected" }).returning();
-  return c.json({ connector, webhookSecret: connDef.requiresSetup ? webhookSecret : null, webhookUrl: `/api/connectors/${platform}/webhook` });
+  const parsedConfig = { webhookSecret, apiUrl: body.apiUrl };
+  return c.json({ connector: { ...connector, config: parsedConfig, enabled: true, apiUrl: parsedConfig.apiUrl || null }, webhookSecret: connDef.requiresSetup ? webhookSecret : null, webhookUrl: `/api/connectors/${platform}/webhook` });
+});
+
+// PUT /connectors/:connectorId — enable/disable or update config
+connectorsRouter.put("/connectors/:connectorId", async (c) => {
+  const connectorId = c.req.param("connectorId");
+  const user: UserPayload = c.get("user");
+  const body = await c.req.json().catch(() => ({}));
+
+  const check = await db
+    .select({ companyId: connectorsTable.companyId, config: connectorsTable.config, status: connectorsTable.status })
+    .from(connectorsTable)
+    .where(sql`${connectorsTable.id} = ${connectorId}`)
+    .limit(1);
+  if (check.length === 0) return c.json({ error: "Not found" }, 404);
+
+  const access = await db.select()
+    .from(companyMembers)
+    .where(sql`${companyMembers.companyId} = ${check[0].companyId} AND ${companyMembers.userId} = ${user.userId}`)
+    .limit(1);
+  if (access.length === 0) return c.json({ error: "Unauthorized" }, 403);
+
+  let parsed: any = null;
+  try { parsed = check[0].config ? JSON.parse(check[0].config) : {}; } catch { parsed = {}; }
+  const nextConfig = {
+    ...parsed,
+    apiUrl: body.apiUrl ?? parsed.apiUrl,
+  };
+
+  const nextStatus = typeof body.enabled === "boolean"
+    ? (body.enabled ? "connected" : "disabled")
+    : (check[0].status || "connected");
+
+  await db.update(connectorsTable).set({
+    status: nextStatus,
+    config: JSON.stringify(nextConfig),
+  }).where(sql`${connectorsTable.id} = ${connectorId}`);
+
+  return c.json({ ok: true, enabled: nextStatus !== "disabled" });
 });
 
 // DELETE /connectors/:connectorId
