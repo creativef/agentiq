@@ -17,6 +17,7 @@ interface ExecutionContext {
   companyId: string;
   projectId: string;
   agentSkills: Array<{ name: string; category: string; instructions: string }>;
+  scratchpad: string | null;   // Shared context from CEO/parent
 }
 
 interface ExecutionStep {
@@ -303,6 +304,7 @@ tasksRouter.post("/tasks/:taskId/execute", async (c) => {
     taskId, taskTitle: task.title, taskDescription: task.description || "",
     assignedAgent: assignedAgentData || { id: "", name: "System", role: "SYSTEM" },
     companyId, projectId, agentSkills: agentSkillList,
+    scratchpad: task.scratchpad || null,
   };
 
   await db.update(tasks).set({ execStatus: "executing" }).where(sql`${tasks.id} = ${taskId}`);
