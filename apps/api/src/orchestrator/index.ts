@@ -1,11 +1,6 @@
-// ============================================================
-// CEO Orchestrator — Main Entry Point
-// Autonomous decision loop: LLM reasoning + rule-based fallback
-// ============================================================
-
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db/client";
 import { companies, llmProviders } from "../db/schema";
-import { sql } from "drizzle-orm";
 import { buildCEOContext } from "./context-builder";
 import { monitorTasks } from "./task-monitor";
 import { routeTasks } from "./task-router";
@@ -20,80 +15,65 @@ import type { LLMProviderConfig } from "../llm/provider";
 
 // ---------- config ----------
 interface Config {
-  tickMs: number;           // main loop interval (default 30 000)
-  reportHours: number;      // founder-report interval  (default 24)
-  enabled: boolean;
+  intervalMs: number;
+  reportHours: number;
+  tickCount: number;
+  lastReport: Map<string, number>;
+  loopId: NodeJS.Timeout | null;
 }
-
-const DEFAULTS: Config = { tickMs: 30_000, reportHours: 24, enabled: true };
-
-// ---------- singleton ----------
-let orch: CEOOrchestrator | null = null;
 
 class CEOOrchestrator {
   private cfg: Config;
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private lastReport = new Map<string, number>();
-  private tickCount = 0;
 
-  constructor(partial?: Partial<Config>) {
-    this.cfg = { ...DEFAULTS, ...partial };
+  constructor(cfg?: Partial<Config>) {
+    this.cfg = {
+      intervalMs: 30_000,
+      reportHours: cfg?.reportHours || 24,
+      tickCount: 0,
+      lastReport: new Map(),
+      loopId: null,
+    };
   }
 
-  // ----- start / stop -----
   start() {
-    if (!this.cfg.enabled) {
-      console.log("[CEO] orchestrator disabled");
-      return;
-    }
-    console.log("[CEO] orchestrator starting");
-    this.timer = setInterval(() => this.tickAll(), this.cfg.tickMs);
-    // fire the first tick immediately
+    if (this.cfg.loopId) return;
+    // Run immediately once, then schedule
     this.tickAll();
+    this.cfg.loopId = setInterval(() => this.tickAll(), this.cfg.intervalMs);
+    console.log(`[CEO] Orchestrator started (every ${this.cfg.intervalMs / 1000}s)`);
   }
 
   stop() {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-    console.log("[CEO] orchestrator stopped");
+    if (this.cfg.loopId) clearInterval(this.cfg.loopId);
+    this.cfg.loopId = null;
+    console.log("[CEO] Orchestrator stopped.");
   }
 
-  // ----- main loop -----
-  private async tickAll() {
+  async tickAll() {
     try {
-      const rows = await db.select({ id: companies.id, name: companies.name }).from(companies);
-      for (const row of rows) await this.tickOne(row.id, row.name);
+      const allCompanies = await db
+        .select({ id: companies.id, name: companies.name })
+        .from(companies);
+
+      for (const company of allCompanies) {
+        await this.tickCompany(company.id, company.name);
+      }
     } catch (e: any) {
-      console.error("[CEO] tickAll error:", e);
+      console.error("[CEO] Critical tick error:", e.message);
     }
   }
 
-  private async tickOne(companyId: string, name: string) {
+  async tickCompany(companyId: string, name: string) {
     try {
-      // 0 – build context and fetch LLM config
+      // 1. Build context (Agents, Tasks, Briefs)
       const ctx = await buildCEOContext(companyId);
       
-      // Get active LLM provider for this company
-      const llmRow = await db
-        .select({
-          id: llmProviders.id,
-          provider: llmProviders.provider,
-          model: llmProviders.model,
-          baseUrl: llmProviders.baseUrl,
-          apiKey: llmProviders.apiKey,
-          maxTokens: llmProviders.maxTokens,
-          temperature: llmProviders.temperature,
-        })
-        .from(llmProviders)
-        .where(sql`${llmProviders.companyId} = ${companyId} AND ${llmProviders.isActive} = true`)
-        .limit(1);
-
-      const llmConfig: import("../llm/provider").LLMProviderConfig | null = llmRow.length > 0
+      // 2. Resolve active LLM
+      const llmRow = await db.select().from(llmProviders).where(eq(llmProviders.companyId, companyId)).limit(1);
+      const llmConfig: LLMProviderConfig | null = llmRow.length > 0
         ? {
-            id: llmRow[0].id,
             provider: llmRow[0].provider as any,
             model: llmRow[0].model,
-            baseUrl: llmRow[0].baseUrl || undefined,
             apiKey: llmRow[0].apiKey || undefined,
             maxTokens: llmRow[0].maxTokens || 4000,
             temperature: llmRow[0].temperature || 0.3,
@@ -102,133 +82,136 @@ class CEOOrchestrator {
 
       const actions: CEOAction[] = [];
 
-      // 1 – LLM decision engine (if configured)
+      // 3. LLM Decision Engine
       if (llmConfig) {
         const llmActions = await makeLLMDecisions(ctx, llmConfig);
         actions.push(...llmActions);
-        if (llmActions.length > 0) {
-          console.log(`[CEO ${name} LLM] ${llmActions.length} decisions`);
-        }
       }
 
-      // 2 – rule-based triage (always runs, handles what LLM missed)
+      // 4. Rule-based Triage (Monitor & Route)
       actions.push(...await monitorTasks(ctx));
-
-      // 3 – rule-based routing (fallback for unassigned tasks)
       actions.push(...await routeTasks(ctx));
 
-      // 4 – team assessment every 20 ticks
-      if (this.tickCount % 20 === 0) {
+      // 5. Team Assessment
+      if (this.cfg.tickCount % 20 === 0) {
         actions.push(...await assessTeam(ctx));
       }
 
-      // 5 – founder report on schedule
+      // 6. Founder Report
       const now = Date.now();
-      const last = this.lastReport.get(companyId) || 0;
+      const last = this.cfg.lastReport.get(companyId) || 0;
       const hrs = (now - last) / 3_600_000;
       if (hrs >= this.cfg.reportHours) {
         actions.push(await generateReport(ctx));
-        this.lastReport.set(companyId, now);
+        this.cfg.lastReport.set(companyId, now);
       }
 
-      // 6 – execute ALL CEO actions IN PARALLEL (up to 5 at once)
-      this.tickCount++;
+      // 7. Execute Actions
+      this.cfg.tickCount++;
       let ok = 0, fail = 0;
-      
-      // Split actions into batches of 5 for safe parallel execution
-      const BATCH_SIZE = 5;
-      for (let i = 0; i < actions.length; i += BATCH_SIZE) {
-        const batch = actions.slice(i, i + BATCH_SIZE);
-        const results = await Promise.allSettled(
-          batch.map(a => executeAction(a, ctx).then(r => ({ action: a, result: r })))
-        );
-        
-        for (const settled of results) {
-          if (settled.status === 'fulfilled' && settled.value.result.success) {
-            ok++;
-            console.log(`[CEO Tool OK] ${settled.value.action.type}: ${settled.value.result.detail}`);
-          } else {
-            fail++;
-            const detail = settled.status === 'rejected' ? settled.reason : settled.value.result.detail;
-            console.error(`[CEO FAIL] ${settled.status === 'rejected' ? 'error' : detail}`);
-          }
-        }
+      for (const a of actions) {
+        const r = await executeAction(a, ctx);
+        if (r.success) ok++; else { fail++; console.error(`[CEO ${name}] FAIL ${a.type}: ${r.detail}`); }
       }
-
-      // Auto-execute tasks that are ready (if CEO assigned them this tick)
-      const newlyAssigned = actions.filter(a => a.type === 'assign_task' || (a.type === 'ceo_tool' && a.payload.tool === 'create_task'));
-      if (newlyAssigned.length > 0) {
-        console.log(`[CEO ${name}] Assigned ${newlyAssigned.length} new task(s) — next tick will auto-execute`);
-      }
-
       if (actions.length > 0) console.log(`[CEO ${name}] ${ok} ok, ${fail} fail (${actions.length} actions)`);
 
-      // 7 – CEO SELF-EXECUTION: Run any "Ready" tasks assigned to CEO
-      const ceoAgent = ctx.agents.find(a => a.role === 'CEO') || null;
-      if (ceoAgent) {
-        try {
-          const ceoReadyTasks = await db
-            .select({ id: tasks.id, title: tasks.title, description: tasks.description, scratchpad: tasks.scratchpad, projectId: tasks.projectId })
-            .from(tasks)
-            .leftJoin(projects, sql`$ { tasks.projectId } = $ { projects.id } `)
-            .where(sql`
-              DS LB tasks.agentId RB = DS LB ceoAgent.id RB
-              AND DS LB tasks.status RB IN ('ready', 'in_progress')
-              AND DS LB tasks.execStatus RB = 'ready'
-              AND DS LB projects.companyId RB = DS LB companyId RB
-            `)
-            .limit(3); // Max 3 CEO tasks per tick
+      // 8. CEO SELF-EXECUTION (The "Player-Coach" Loop)
+      await this.executeCEOInbox(companyId, name, ctx);
 
-          for (const t of ceoReadyTasks) {
-            try {
-              const skillRows = await db
-                .select({ name: skillsTable.name, category: skillsTable.category, instructions: skillsTable.instructions })
-                .from(agentSkills).innerJoin(skillsTable, sql`$ { agentSkills.skillId } = $ { skillsTable.id }`)
-                .where(sql`DS LB agentSkills.agentId RB = DS LB ceoAgent.id RB`);
-
-              await db.update(tasks)
-                .set({ execStatus: "executing", status: "in_progress" })
-                .where(sql`DS LB tasks.id RB = DS LB t.id RB`);
-
-              const execResult = await runTaskExecution({{
-                taskId: t.id,
-                taskTitle: t.title,
-                taskDescription: t.description || "",
-                assignedAgent: { id: ceoAgent.id, name: ceoAgent.name, role: ceoAgent.role },
-                companyId,
-                projectId: t.projectId || companyId,
-                agentSkills: skillRows,
-                scratchpad: t.scratchpad,
-              });
-
-              await db.update(tasks).set({{
-                execStatus: execResult.success ? "completed" : "failed",
-                status: execResult.success ? "done" : "blocked",
-                result: execResult.report || "No output",
-              }).where(sql`$ { tasks.id } = $ { t.id }`);
-
-              console.log(`[CEO-EXEC] Done: $ { t.title }`);
-            } catch (e: any) {
-              console.error(`[CEO-EXEC] Failed: $ { t.title }`, e.message);
-              await db.update(tasks).set({ execStatus: "failed", status: "blocked", result: e.message })
-                .where(sql`$ { tasks.id } = $ { t.id }`);
-            }
-          }
-        } catch (e: any) {
-          console.error(`[CEO-EXEC] Self-exec error:`, e.message);
-        }
-      }
     } catch (e: any) {
-      console.error(`[CEO ${name}] tick error:`, e);
+      console.error(`[CEO ${name}] tick error:`, e.message);
+    }
+  }
+
+  /**
+   * CEO Inbox: The CEO looks for tasks assigned to itself and executes them directly.
+   * This implements the "Player-Coach" pattern where the CEO doesn't just manage
+   * strategy but actively runs the "Brief Analysis" and "Strategy" tasks.
+   */
+  async executeCEOInbox(companyId: string, name: string, ctx: any) {
+    const ceoAgent = ctx.agents.find((a: any) => a.role === 'CEO');
+    if (!ceoAgent) return;
+
+    // Find CEO's ready tasks
+    const ceoReadyTasks = await db.select({
+        id: tasks.id,
+        title: tasks.title,
+        description: tasks.description,
+        scratchpad: tasks.scratchpad,
+        projectId: tasks.projectId
+      })
+      .from(tasks)
+      .leftJoin(projects, eq(tasks.projectId, projects.id))
+      .where(and(
+        eq(tasks.agentId, ceoAgent.id),
+        inArray(tasks.status, ['ready', 'in_progress']),
+        eq(tasks.execStatus, 'ready'),
+        eq(projects.companyId, companyId)
+      ))
+      .limit(3); // Max 3 tasks per tick
+
+    if (ceoReadyTasks.length === 0) return;
+    console.log(`[CEO ${name}] Found ${ceoReadyTasks.length} task(s) to self-execute.`);
+
+    for (const t of ceoReadyTasks) {
+      try {
+        // Fetch skills for the CEO
+        const skillRows = await db
+          .select({
+            name: skillsTable.name,
+            category: skillsTable.category,
+            instructions: skillsTable.instructions
+          })
+          .from(agentSkills)
+          .innerJoin(skillsTable, eq(agentSkills.skillId, skillsTable.id))
+          .where(eq(agentSkills.agentId, ceoAgent.id));
+
+        // Mark as executing
+        await db.update(tasks)
+          .set({ execStatus: "executing", status: "in_progress" })
+          .where(eq(tasks.id, t.id));
+
+        // Run the execution engine (shared with API routes)
+        const result = await runTaskExecution({
+          taskId: t.id,
+          taskTitle: t.title,
+          taskDescription: t.description || "",
+          assignedAgent: { id: ceoAgent.id, name: ceoAgent.name, role: ceoAgent.role },
+          companyId,
+          projectId: t.projectId || companyId,
+          agentSkills: skillRows,
+          scratchpad: t.scratchpad,
+        });
+
+        // Update task result
+        await db.update(tasks).set({
+          execStatus: result.success ? "completed" : "failed",
+          status: result.success ? "done" : "blocked",
+          result: result.report || "No output",
+        }).where(eq(tasks.id, t.id));
+
+        console.log(`[CEO-EXEC] ✅ Done: "${t.title}"`);
+
+      } catch (e: any) {
+        console.error(`[CEO-EXEC] Failed: "${t.title}"`, e.message);
+        await db.update(tasks)
+          .set({ execStatus: "failed", status: "blocked", result: e.message })
+          .where(eq(tasks.id, t.id));
+      }
     }
   }
 }
 
+// Singleton
+let orch: CEOOrchestrator | null = null;
+
 export function startCEOOrchestrator(cfg?: Partial<Config>) {
-  if (orch) { console.log("[CEO] already running"); return orch; }
+  if (orch) return orch;
   orch = new CEOOrchestrator(cfg);
   orch.start();
   return orch;
 }
 
-export function stopCEOOrchestrator() { if (orch) { orch.stop(); orch = null; } }
+export function stopCEOOrchestrator() {
+  if (orch) { orch.stop(); orch = null; }
+}
