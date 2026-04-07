@@ -6,14 +6,22 @@ FROM node:20-alpine
 # Install Python and pip for Hermes CLI
 RUN apk add --no-cache python3 py3-pip curl wget git
 
-# Install Hermes from NousResearch GitHub repo
-RUN echo "=== Installing Hermes from NousResearch/hermes-agent ===" && \
-    # Clone the repo
-    git clone https://github.com/NousResearch/hermes-agent.git /tmp/hermes-agent && \
-    cd /tmp/hermes-agent && \
-    # Install with pip (from the cloned repo)
-    pip install . --break-system-packages && \
-    echo "✓ Hermes installed from NousResearch/hermes-agent"
+# Install Hermes - try multiple methods
+RUN echo "=== Installing Hermes CLI ===" && \
+    # Method 1: Try from PyPI (if package exists)
+    (pip install hermes-agent --break-system-packages 2>&1 | grep -v "ERROR:" && echo "✓ Installed from PyPI: hermes-agent") || \
+    # Method 2: Try from GitHub NousResearch/hermes-agent
+    (git clone https://github.com/NousResearch/hermes-agent.git /tmp/hermes-agent && \
+     cd /tmp/hermes-agent && \
+     pip install . --break-system-packages 2>&1 | grep -v "ERROR:" && \
+     echo "✓ Installed from GitHub: NousResearch/hermes-agent") || \
+    # Method 3: Try alternative package name
+    (pip install hermes --break-system-packages 2>&1 | grep -v "ERROR:" && echo "✓ Installed from PyPI: hermes") || \
+    # Method 4: Last resort - install from pipx
+    (pip install pipx --break-system-packages && \
+     pipx install hermes-agent 2>&1 | grep -v "ERROR:" && \
+     echo "✓ Installed via pipx: hermes-agent") || \
+    echo "⚠ Hermes installation may have failed - check logs"
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@9 --activate

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { tasks, agents, projects, companyMembers, companies } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
-import { enqueueExecution } from "../execution/dispatcher";
+import { enqueueExecution, recordExecutionEvent } from "../execution/dispatcher";
 
 // ============================================================
 // REAL EXECUTION ENGINE
@@ -88,7 +88,20 @@ tasksRouter.post("/tasks", async (c) => {
   }).returning();
 
   if (!approvalStatus && !body.scheduledAt) {
-    await db.update(tasks).set({ execStatus: "ready" }).where(sql`${tasks.id} = ${newTask[0].id}`);
+    await db.update(tasks).set({ execStatus: "ready", status: "ready" }).where(sql`${tasks.id} = ${newTask[0].id}`);
+
+    // Auto-enqueue for Hermes execution
+    const projectRow = await db.select({ companyId: projects.companyId })
+      .from(projects).where(sql`${projects.id} = ${body.projectId}`).limit(1);
+    if (projectRow.length > 0) {
+      await enqueueExecution({
+        taskId: newTask[0].id,
+        agentId: body.agentId || null,
+        companyId: projectRow[0].companyId,
+        payload: { source: "direct_create" },
+      });
+      console.log(`[Tasks] Auto-enqueued task ${newTask[0].id} for Hermes`);
+    }
   }
   return c.json({ task: newTask[0] });
 });
@@ -96,7 +109,28 @@ tasksRouter.post("/tasks", async (c) => {
 // POST /tasks/:taskId/approve
 tasksRouter.post("/tasks/:taskId/approve", async (c) => {
   const taskId = c.req.param("taskId");
-  await db.update(tasks).set({ approvalStatus: "approved", execStatus: "ready" }).where(sql`${tasks.id} = ${taskId}`);
+  
+  // Find the task to get its projectId for enqueueing
+  const taskCheck = await db.select({ projectId: tasks.projectId, agentId: tasks.agentId })
+    .from(tasks).where(sql`${tasks.id} = ${taskId}`).limit(1);
+  
+  await db.update(tasks).set({ approvalStatus: "approved", execStatus: "ready", status: "ready" }).where(sql`${tasks.id} = ${taskId}`);
+  
+  // Auto-enqueue for Hermes execution after approval
+  if (taskCheck.length > 0 && taskCheck[0].projectId) {
+    const projectRow = await db.select({ companyId: projects.companyId })
+      .from(projects).where(sql`${projects.id} = ${taskCheck[0].projectId}`).limit(1);
+    if (projectRow.length > 0) {
+      await enqueueExecution({
+        taskId,
+        agentId: taskCheck[0].agentId,
+        companyId: projectRow[0].companyId,
+        payload: { source: "approved" },
+      });
+      console.log(`[Tasks] Auto-enqueued approved task ${taskId} for Hermes`);
+    }
+  }
+  
   return c.json({ ok: true });
 });
 

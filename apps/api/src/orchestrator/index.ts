@@ -8,7 +8,7 @@ import { assessTeam } from "./team-assessor";
 import { generateReport } from "./report-generator";
 import { executeAction } from "./action-executor";
 import { makeLLMDecisions } from "./llm-decider";
-import { runTaskExecution } from "../utils/task-runner";
+import { enqueueExecution } from "../execution/dispatcher";
 import { tasks, projects, agents, agentSkills, skills as skillsTable } from "../db/schema";
 import type { CEOAction } from "./types";
 import type { LLMProviderConfig } from "../llm/provider";
@@ -163,28 +163,10 @@ class CEOOrchestrator {
       return;
     }
 
-    console.log(`[CEO ${name}] Found ${ceoReadyTasks.length} task(s) to self-execute:`, ceoReadyTasks.map(t => t.title));
+    console.log(`[CEO ${name}] Found ${ceoReadyTasks.length} task(s) to execute, enqueuing for Hermes...`);
 
     for (const t of ceoReadyTasks) {
       try {
-        // Fetch skills for the CEO
-        const skillRows = await db
-          .select({
-            name: skillsTable.name,
-            category: skillsTable.category,
-            instructions: skillsTable.instructions
-          })
-          .from(agentSkills)
-          .innerJoin(skillsTable, eq(agentSkills.skillId, skillsTable.id))
-          .where(eq(agentSkills.agentId, ceoAgent.id));
-
-        // Mark as executing
-        await db.update(tasks)
-          .set({ execStatus: "executing" })
-          .where(eq(tasks.id, t.id));
-
-        console.log(`[CEO ${name}] Executing task: "${t.title}"...`);
-
         // Ensure a valid projectId
         let resolvedProjectId = t.projectId || null;
         if (!resolvedProjectId) {
@@ -203,33 +185,23 @@ class CEOOrchestrator {
           await db.update(tasks).set({ projectId: resolvedProjectId }).where(eq(tasks.id, t.id));
         }
 
-        // Run the execution engine
-        const result = await runTaskExecution({
+        // Enqueue for Hermes execution (not local execution)
+        await enqueueExecution({
           taskId: t.id,
-          taskTitle: t.title,
-          taskDescription: t.description || "",
-          assignedAgent: { id: ceoAgent.id, name: ceoAgent.name, role: ceoAgent.role },
+          agentId: ceoAgent.id,
           companyId,
-          projectId: resolvedProjectId,
-          agentSkills: skillRows,
-          scratchpad: t.scratchpad,
+          payload: { title: t.title, scratchpad: t.scratchpad },
         });
 
-        // Update task result
-        await db.update(tasks).set({
-          execStatus: result.success ? "completed" : "failed",
-          status: result.success ? "done" : "blocked",
-          result: (result.report || "No output").substring(0, 2000),
-        }).where(eq(tasks.id, t.id));
+        // Update task status to queued
+        await db.update(tasks)
+          .set({ execStatus: "queued", status: "in_progress" })
+          .where(eq(tasks.id, t.id));
 
-        if (result.success) {
-          console.log(`[CEO-EXEC] ✅ Done: "${t.title}"`);
-        } else {
-          console.error(`[CEO-EXEC] ❌ Failed: "${t.title}"`);
-        }
+        console.log(`[CEO-EXEC] 🚀 Enqueued for Hermes: "${t.title}"`);
 
       } catch (e: any) {
-        console.error(`[CEO-EXEC] Failed: "${t.title}"`, e.message);
+        console.error(`[CEO-EXEC] Failed to enqueue "${t.title}"`, e.message);
         await db.update(tasks)
           .set({ execStatus: "failed", status: "blocked", result: e.message })
           .where(eq(tasks.id, t.id));

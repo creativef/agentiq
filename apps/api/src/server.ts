@@ -13,8 +13,8 @@ serve({
 console.log(`API server running on port ${port}`);
 
 // Start CEO autonomous orchestrator (30s tick)
-// DISABLED TEMPORARILY: Fixing infinite recursion bug
-// startCEOOrchestrator();
+// Orchestrator decides task assignments -> enqueue to Hermes for execution
+startCEOOrchestrator();
 
 // Local task worker disabled — Hermes handles execution
 
