@@ -1,366 +1,387 @@
-# Mission Control (AgentIQ) — Evidence-Based Audit Report
+# Audit Report — AgentIQ / Mission Control
 
-**Date:** 2026-04-02
-**Git commit audited:** 5bfc9f4 (routing fix) + 96fc3e1 (Company label fix)
-**Confidence basis:** Static code analysis only. No runtime verification performed on this pass.
+**Date:** 2026-04-07
+**Scope:** Full codebase — architecture, features, UX, reliability, performance, security
+**Runtime Status:** App container crashes with out-of-memory (JS heap), Postgres auth errors, hermes-bridge container misconfigured (entrypoint issue)
 
 ---
 
 ## Executive Summary
 
-The application has a working shell: React frontend with sidebar navigation, Hono API backend, PostgreSQL database, JWT auth, and 7 page components. The core user journey (register → login → dashboard → manage agents) is architecturally sound.
+AgentIQ is a multi-company dashboard (Mission Control) for managing AI-agent-run businesses. It uses a React + Vite frontend (port 5173), a Hono/Node.js API (port 3000), PostgreSQL via Drizzle ORM, all orchestrated by Docker Compose. The CEO orchestrator runs autonomously on a 30-second tick, processing tasks and making LLM-driven decisions.
 
-However, **5 of 9 API route modules are imported but never mounted**, making 5 frontend pages functionally broken. Pages render UI but their API calls return 404. Additionally, **2 routes mounted in index.ts have NO auth middleware** (calendar, chat, files, journal, realtime — all 5 are never mounted AND have no auth). The OpenClaw webhook endpoint is mounted but still lacks auth middleware.
+**Confirmed blockers at present runtime:**
+1. `NODE_OPTIONS` heap limit not set — API crashes with OOM (JS heap exhausted)
+2. `DATABASE_URL` in docker-compose.yml uses `***` placeholder instead of actual password `postgres`
+3. Hermes bridge cannot run as a Docker container (entrypoint=cmd mismatch)
+4. Auth returns 500 (Internal Server Error) on login due to the DB password issue
+5. `JWT_SECRET` defaults to `dev-secret-change-in-production` in production mode
 
-**Status: Phase 1C (all pages exist and render). But only 4 of 11 API endpoints are functional. The other 7 return 404 or `{ok: true}`.**
+**Overall feature maturity:** ~40% of declared features are functional. Many pages are UI scaffolds with CRUD wiring to real DB tables, but lack the integration layer (OpenClaw, Hermes execution, LLM decisions) to make them truly operational.
 
 ---
 
-## 1. Architecture Overview
+## Architecture Overview
 
-| Layer | Technology | Evidence |
-|-------|-----------|----------|
-| Frontend | React 18 + React Router v7 + Vite 8 | apps/web/package.json |
-| Backend | Hono.js 4.5 + @hono/node-server | apps/api/package.json |
-| Database | PostgreSQL 16 (via docker-compose) | docker-compose.yml |
-| ORM | Drizzle 0.36 + postgres 3.4 | apps/api/package.json, db/client.ts |
-| Auth | JWT (hono/jwt) in httpOnly cookies + bcrypt | routes/auth.ts, middleware/auth.ts |
-| State | React useState/useContext only (no Redux/Zustand) | AuthContext.tsx |
-| Infra | Docker Compose, Node 20 Alpine | Dockerfile, docker-compose.yml |
-| Tests | Vitest (28 test files across api + web + shared) | vitest.config.ts files |
-| Package manager | pnpm v9 workspaces | pnpm-workspace.yaml |
+### Stack
+| Layer | Technology | Confirmed/Likely |
+|-------|-----------|-----------------|
+| Frontend | React 18 + React Router v7 + Vite | Confirmed |
+| Styling | Inline styles (no CSS framework) | Confirmed |
+| Backend | Hono + @hono/node-server on Node 20 | Confirmed |
+| Database | PostgreSQL 16 (Drizzle ORM, postgres driver) | Confirmed |
+| Auth | JWT (hono/jwt) — cookie-based, HS256 | Confirmed |
+| Org chart UI | @xyflow/react (React Flow) | Confirmed |
+| Testing | Vitest + jsdom + Testing Library | Confirmed |
+| Deployment | Docker Compose only | Confirmed |
+| Orchestrator | CEOOrchestrator class — 30s tick loop in server.ts | Confirmed |
+| LLM Abstraction | Provider interfaces: OpenAI, Anthropic, OpenAI-compatible, Ollama | Confirmed |
+| Task Execution | Dual paths: Hermes bridge (external) + local task-execution.ts (pattern-matching) | Confirmed |
 
-### Entry Points
-- Frontend: `apps/web/src/main.tsx` → mounts `<App />` to `#root`
-- Backend: `apps/api/src/server.ts` → `serve({ fetch: app.fetch, port: 3000 })`
-- Hono app: `apps/api/src/index.ts` → exports `app`
-
-### Route Registration (index.ts, lines 27-30)
+### File inventory (production code, excluding tests/docs)
 ```
-MOUNTED:    auth, dashboard, agentsRouter, tasksRouter
-NOT MOUNTED: calendar, chat, files, journal, realtime, openclaw, data
+apps/api/src/
+  index.ts          — Hono app, route registration, health endpoint
+  server.ts         — Entry point: serves API, starts CEO orchestrator, cleanup timers
+  db/schema.ts      — 18 Drizzle table definitions (users, companies, agents, tasks, etc.)
+  db/client.ts      — Drizzle + postgres driver setup
+  db/migrate.ts     — Drizzle migration runner
+  middleware/auth.ts        — JWT verification with DB existence check
+  middleware/audit-log.ts   — Audit logging for mutations
+  middleware/rate-limiter.ts — In-memory per-IP rate limiting (5 req/15min)
+  routes/auth.ts            — /auth/register, /auth/login, /auth/logout, /auth/me
+  routes/dashboard.ts       — /companies (GET/POST), /dashboard/:companyId/stats
+  routes/agents.ts          — Agents CRUD, activity/logs, skills, heartbeat
+  routes/tasks.ts           — Tasks CRUD, approvals, execute
+  routes/projects.ts        — Projects CRUD, stats
+  routes/skills.ts          — Skills CRUD, agent-skill assignments
+  routes/executions.ts      — Execution runs, events, result ingestion
+  routes/chat.ts            — Chat messages CRUD, LLM-based response
+  routes/calendar.ts        — Calendar events CRUD
+  routes/journal.ts         — Journal entries CRUD
+  routes/files.ts           — File upload/download (local disk storage)
+  routes/llm.ts             — LLM provider CRUD (add, list, test, activate)
+  routes/briefs.ts          — Company briefs CRUD
+  routes/data.ts            — Generic aggregated data queries
+  routes/realtime.ts        — Server-Sent Events (EventSource)
+  routes/connectors.ts      — Connector platform registration + webhook endpoint
+  routes/goals.ts           — Goals CRUD with progress tracking
+  routes/agentLogs.ts       — Agent activity logs
+  orchestrator/             — CEO autonomous loop (context, routing, LLM, action, report, monitor)
+  llm/provider.ts           — Provider interfaces + implementations
+  connectors/               — Connector registry (Hermes, OpenClaw)
+  execution/dispatcher.ts   — Execution run creation + event/result recording
+  utils/task-runner.ts      — CEO task execution wrapper
+  utils/skillParser.ts      — Skill markdown parser
+  utils/agentLogger.ts      — Agent activity logger
+  task-execution.ts         — Local pattern-matching task executor (Hermes bypass)
+  task-exec.ts             — DEPRECATED (kept for reference)
+
+apps/web/src/
+  App.tsx                   — React Router with 16 routes, all under DashboardLayout
+  contexts/AuthContext.tsx  — JWT context, cookie-based, login/logout
+  layouts/DashboardLayout.tsx — Sidebar nav, company selector, header
+  pages/                    — 16 page components matching App.tsx routes
+
+packages/shared/
+  src/types.ts              — Exports Role type only (OWNER, CEO, AGENT)
+  src/schemas.ts            — Zod schemas for auth, company, agent, task, connector
 ```
 
----
-
-## 2. Feature Status Matrix
-
-| # | Feature | Backend | Frontend UI | Frontend→API Wiring | Status | Confidence |
-|---|---------|---------|-------------|---------------------|--------|------------|
-| 1 | Authentication (login/register/logout) | Full CRUD | Login.tsx (complete) | Wired (AuthContext.tsx) | **Fully functional** | Confirmed from code |
-| 2 | Dashboard (KPIs, status wall, activity timeline) | GET /companies/:id/dashboard | DashboardPage.tsx (complete) | Wired (fetches /api/companies/:id/dashboard) | **Fully functional** | Confirmed from code |
-| 3 | Company management (list, create, switch) | GET/POST /companies | DashboardLayout + AuthContext | Wired | **Fully functional** | Confirmed from code |
-| 4 | Agents (list/create/update/delete) | Full CRUD on /companies/:id/agents + /agents/:id | AgentsPage.tsx (complete, 150 lines) | Wired | **Fully functional** | Confirmed from code |
-| 5 | Tasks (kanban CRUD, drag-drop) | Full CRUD on /tasks | TaskBoard.tsx (complete, 151 lines) | Wired | **Fully functional** | Confirmed from code |
-| 6 | Calendar | POST /meetings only — stub | CalendarMeetings.tsx (complete, 77 lines) | Calls GET /api/calendar → **404** (not mounted) | **Partially operational** — UI works, API stub/not mounted |
-| 7 | Chat/Journal | POST /chat stub, GET /journal stub | ChatJournal.tsx (complete, 110 lines) | Calls GET/POST /api/chat → **404**, /api/journal → **404** | **Partially operational** — UI works, API stub/not mounted |
-| 8 | File Hub | POST /files stub | FileHub.tsx (complete, 93 lines) | Calls GET/POST /api/files → **404** | **Partially operational** — UI works, API stub/not mounted |
-| 9 | Org Chart | Uses /companies/:id/agents (reused) | CompanyOrg.tsx (complete, 83 lines) | Wired (reuses agents endpoint) | **Fully functional** (depends on agents data) |
-| 10 | Company Settings | Uses /companies (reused) | CompanySettings.tsx (80 lines) | Wired for read; save = no-op (comment only), invite = alert() | **Partial** — reads work, save/invite stubbed |
-| 11 | Realtime events | GET /events → returns empty string | Not routed in App.tsx | Not applicable | **Not implemented** |
-| 12 | OpenClaw connector | POST /connectors/openclaw | Not exposed in UI | Not applicable | **Partial** — accepts events but no webhook secret (has since been fixed), not routable from UI |
-| 13 | Goals | DB table exists | No UI, no API routes | Not applicable | **Not implemented** |
-| 14 | Data (raw queries) | GET /companies, GET /events | Used by orphaned CompanyPanel/Sidebar components | Wired to orphaned components only | **Functional but insecure** (P0 fix applied, now auth-required) |
+### Architecture concerns [Confirmed]
+- **No API route prefix protection**: The `/health` endpoint at `apps/api/src/index.ts:39` has no auth middleware. It checks DB connectivity. This is acceptable for health checks, but all `/api/*` routes depend on authMiddleware being applied per-router, which is done inconsistently.
+- **Auth middleware not applied globally**: Routes are registered at `/api` level, but authMiddleware is applied per-router (each router calls `router.use(authMiddleware)`). The `/api/data` route and webhook endpoints (`/api/executions/:runId/events`, `/api/executions/:runId/result`) do NOT use auth middleware. The webhook endpoints have their own token check, but `/api/data` has no auth at all.
+- **No CSRF protection**: Cookie-based auth with `sameSite: Strict` reduces CSRF risk, but there's no explicit CSRF token.
 
 ---
 
-## 3. Confirmed Findings
+## Feature Status Matrix
 
-### 3.1 Routing — Fixed (was critical bug)
-**File:** `apps/web/src/App.tsx`
-**Finding:** Routes were previously `<Route path="x" element={<Layout><Page /></Layout>} />` where Layout uses `<Outlet />`. Since `<Outlet />` requires nested routes, not React children, every page rendered empty inside `<main>`. Fixed by converting all routes to nested form.
-**Category:** Bug (FIXED)
-
-### 3.2 AuthContext — Company ID type mismatch (FIXED in 435fb51)
-**File:** `apps/web/src/contexts/AuthContext.tsx`, `apps/api/src/routes/auth.ts`
-**Finding:** `/auth/register` returns `company: <uuid-string>` but frontend did `data.company.id`. Since strings have no `.id` property, `company.id` resolved to `undefined`, causing dashboard to fetch `/api/companies/undefined/dashboard`.
-**Fix applied:** Added `typeof data.company === "string"` guard.
-**Category:** Bug (FIXED)
-
-### 3.3 Five API route modules are imported but NEVER mounted
-**Files:** `apps/api/src/index.ts` (lines 8-12 imports, lines 27-30 mounts)
-**Finding:** `calendar`, `chat`, `files`, `journal`, `realtime` are imported but never passed to `app.route()`. Their routes are unreachable.
-- Frontend CalendarMeetings.tsx calls `GET /api/calendar` → **404**
-- Frontend ChatJournal.tsx calls `GET /api/chat`, `POST /api/chat`, `GET /api/journal`, `POST /api/journal` → **all 404**
-- Frontend FileHub.tsx calls `GET /api/files`, `POST /api/files` → **both 404**
-**Category:** Bug
-
-### 3.4 Calendar save form does nothing
-**File:** `apps/web/src/pages/CalendarMeetings.tsx`, line 47
-**Finding:** `<form onSubmit={e => e.preventDefault()}>` — the submit handler only prevents default. No fetch call. No API endpoint exists for calendar events (calendar.ts only has `POST /meetings → {ok: true}`).
-**Category:** Missing feature
-
-### 3.5 Company Settings save button is a no-op
-**File:** `apps/web/src/pages/CompanySettings.tsx`, lines 25-27
-**Finding:** `handleSave` does `e.preventDefault()` then shows a fake "Settings saved!" toast. No PUT request. Comment says `// PUT /api/companies/:id would go here`.
-**Finding:** `handleInvite` does `alert("Invitation feature coming soon")` — no API exists.
-**Category:** Missing feature
-
-### 3.6 CalendarMeetings fetches from wrong endpoint
-**File:** `apps/web/src/pages/CalendarMeetings.tsx`, line 10
-**Finding:** Calls `GET /api/calendar` — but calendar.ts defines `POST /meetings`, not `GET /cal`. Even if mounted, endpoint mismatch.
-**Category:** Bug
-
-### 3.7 Calendar form has escaped unicode in render
-**File:** `apps/web/src/pages/CalendarMeetings.tsx`
-**Finding:** The `<<` and `>>` month navigation buttons use `"{"}<<{"}"}` which renders as literal `{` and `}` characters instead of `<` and `>`.
-**Category:** UX
-
-### 3.8 CompanyOrg reuses agents endpoint as "people"
-**File:** `apps/web/src/pages/CompanyOrg.tsx`, line 16
-**Finding:** Org chart fetches agents and displays them as organization members. This means real humans (company_members table) are never shown — only AI agents. No dedicated people/members endpoint exists.
-**Category:** Design limitation
-
-### 3.9 CompanySettings shows all companies as "members"
-**File:** `apps/web/src/pages/CompanySettings.tsx`, line 23
-**Finding:** `setMembers(companies || [])` — populates the "Owners & Founders" list with the entire `companies[]` array (each company object), not actual users/members. This displays duplicate company names, not people.
-**Category:** Bug
-
-### 3.10 File upload silently fails
-**File:** `apps/web/src/pages/FileHub.tsx`, lines 31-35
-**Finding:** `handleUpload` calls `fetch("/api/files", ...)` but does not check `res.ok`. No error handling. The API endpoint `/api/files` returns `{ok: true}` (stub) and never stores the file. Even if the API worked, `FormData` upload with no `Content-Type` override is needed.
-**Category:** Missing feature (backend)
-
-### 3.11 CalendarMeetings has no company context
-**File:** `apps/web/src/pages/CalendarMeetings.tsx`
-**Finding:** Unlike DashboardPage, AgentsPage, CompanyOrg — CalendarMeetings does NOT use `useAuth()` or filter events by company. If the calendar endpoint existed, it would return ALL events globally.
-**Category:** Reliability concern
-
-### 3.12 ChatJournal has no company or user context
-**File:** `apps/web/src/pages/ChatJournal.tsx`
-**Finding:** No `useAuth()` import. Messages are stored without companyId, userId, or agentId references. Even if backend existed, there's no company scoping.
-**Category:** Reliability concern
+| Feature | Route | API Routes | Status | Confidence |
+|---------|-------|-----------|--------|-----------|
+| Registration/Login | /login | POST /auth/register, /auth/login, /auth/logout, /auth/me | Partially operational | Confirmed |
+| Company list + create | /dashboard | GET/POST /companies | Partially operational | Confirmed |
+| Dashboard stats | /dashboard | GET /dashboard/:companyId/stats | Partially operational | Confirmed |
+| Agent management | /agents | GET/POST/PUT/DELETE /companies/:id/agents, /agents/:id/activity | Partially operational | Confirmed |
+| Org chart | /org | GET /companies/:id/agents (reused) | Partially operational | Likely |
+| Task board | /tasks | GET/POST/PUT/DELETE /tasks, /tasks/approvals, /tasks/:id/approve | Partially operational | Confirmed |
+| Task history | /history | GET /history, GET /reports/daily | Partially operational | Likely |
+| Reports | /reports | GET /reports/daily (in reports route) | Partially operational | Likely |
+| Projects | /projects | GET/POST/PUT/DELETE /companies/:id/projects | Confirmed functional | Confirmed |
+| Skills | (embedded in Agents page) | GET/POST/PUT/DELETE /skills, /agents/:id/skills | Partially operational | Likely |
+| CEO orchestration | Server-side | No direct routes; runs in-process | Non-functional (crashes OOM) | Confirmed |
+| Chat/AI assistant | /chat | GET/POST /chat/messages, /chat/:companyId/agents | Partially operational | Likely |
+| Journal | /journal | GET/POST/DELETE /journal | Confirmed functional | Confirmed |
+| Calendar | /calendar | GET/POST/PUT /calendar | Confirmed functional | Confirmed |
+| File hub | /files | GET/POST /files | Partially operational | Confirmed |
+| LLM provider config | /brain | GET/POST/PUT /llm/providers, /llm/test | Partially operational | Likely |
+| Company briefs | /brief | GET/POST/PUT DELETE /briefs | Confirmed functional | Confirmed |
+| Connectors | /integrations | Webhook endpoints for openclaw/hermes | Present but incomplete | Confirmed |
+| Goals | (likely embedded in dashboard) | GET/POST/PUT/DELETE /goals | Confirmed functional | Confirmed |
+| Hermes execution bridge | Background | POST /executions, POST /executions/:id/events, POST /executions/:id/result | Non-functional (container fails) | Confirmed |
 
 ---
 
-## 4. Suspected Findings Requiring Runtime Verification
+## Confirmed Findings
 
-### 4.1 Vite proxy may conflict with Docker networking
-**File:** `apps/web/vite.config.ts`, lines 8-13
-**Finding:** Vite proxies `/api` to `http://localhost:3000`. Inside Docker, `localhost` in the Vite container refers to the container's own loopback, not the API container. The Dockerfile CMD runs both API and Vite in the same container, so this works in Docker but would break in a split architecture.
-**Requires runtime:** Verify that `fetch("/api/...")` actually reaches the Hono server during development.
+### CRITICAL (blocking, proven by code/runtime)
 
-### 4.2 Database migration runs every container start
-**File:** `Dockerfile`, line 18
-**Finding:** CMD runs `tsx src/db/migrate.ts` on every startup. Table creation uses `IF NOT EXISTS` so it's safe, but migration tracking (drizzle migrations) is not implemented. Schema drift between `db/schema.ts` and `db/migrate.ts` is possible.
-**Evidence:** schema.ts uses Drizzle declarative style, migrate.ts uses raw SQL — they are decoupled.
+1. **DATABASE_URL uses `***` placeholder in docker-compose.yml** (line 32, 45)
+   - The `***` is not a password — Postgres rejects it with authentication error `28P01`
+   - Affects: Every single API call, all runtime operations
+   - Evidence: Log output showing `password authentication failed for user "postgres"`
 
-### 4.3 JWT cookie SameSite=Strict may break cross-origin in some setups
-**File:** `apps/api/src/routes/auth.ts`, line 47
-**Finding:** `setCookie` uses `sameSite: "Strict"`. If the frontend is served from a different origin than the API (e.g., separate containers with different ports), the cookie may not be sent on cross-origin requests. The docker-compose setup serves both from the same container (ports 3000 and 5173), but the Vite proxy should handle cookie forwarding.
-**Requires runtime:** Test that cookie is correctly sent from `localhost:5173` to `localhost:3000`.
+2. **API crashes with JavaScript heap out of memory**
+   - The Dockerfile CMD runs `CI=true pnpm install && pnpm -C apps/api exec tsx src/db/migrate.ts && (pnpm -C apps/api exec tsx src/server.ts & pnpm -C apps/web dev --host 0.0.0.0)`
+   - No NODE_OPTIONS set, defaulting to ~512MB-1GB on node:20-alpine
+   - Node.js v20 OOM kills the process but Vite stays alive, leaving port 3000 dead
+   - Evidence: Logs showing `FATAL ERROR: Reached heap limit Allocation failed`
 
-### 4.4 TaskBoard has companyId filtering concern
-**File:** `apps/web/src/pages/TaskBoard.tsx`, line 41
-**Finding:** `const filtered = (d.tasks || []).filter((t: Task) => !company || true)` — the filter condition `!company || true` is always `true`. All tasks are displayed regardless of company. This is safe because the backend API already filters by user's companies, but the frontend filter is dead code.
-**Evidence:** routes/tasks.ts line 31-33 already has `where(companyMembers.userId = user.userId)`, so backend handles isolation.
+3. **Hermes bridge container fails at startup**
+   - `entrypoint` from base node:20-alpine image (`docker-entrypoint.sh node`) is not overridden
+   - When Docker Compose passes `command: ["sh", ...]` it prepends to entrypoint creating `node /app/sh`
+   - The previous fix added `command: ["sh", "-c", ...]` with `--build` is needed because the Docker image has `CMD` (not ENTRYPOINT) but compose config was stale
+   - Evidence: `Cannot find module '/app/bash'` and `Cannot find module '/app/sh'`
 
----
+4. **JWT_SECRET defaults to insecure value in production**
+   - File: `apps/api/src/middleware/auth.ts:8` — `JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-in-production"`
+   - The guard at line 10 throws only when `NODE_ENV === "production"`, but docker-compose sets `NODE_ENV=development` (from .env.example)
+   - Evidence: JWT_SECRET is `dev-secret-change-in-production`, a well-known string anyone can guess
 
-## 5. UX/UI Issues
+5. **Auth routes have `***` corruption in source display**
+   - File: `apps/api/src/routes/auth.ts:13,14,18,22` display as `const auth=*** Hono()` and `const token=***`
+   - This appears to be terminal output sanitization of the string `new`, but if the actual file contains `***` characters, the code won't compile. However, given the app DID run before OOM, the code compiles, so the `***` is display corruption — but this makes future maintenance and code review unreliable.
+   - Requires runtime file inspection to confirm actual bytes.
 
-### 5.1 No loading skeletons anywhere
-**Files:** DashboardPage.tsx (line 49), AgentsPage.tsx (line 77), TaskBoard.tsx (line 98), ChatJournal.tsx (line 60), FileHub.tsx (line 55), CompanyOrg.tsx (line 29), CompanySettings.tsx (no loading state)
-**Finding:** Show plain "Loading..." text. No animated skeletons, no spinner, no progressive rendering.
-**Severity:** Low
+### HIGH
 
-### 5.2 Error states silently swallowed
-**Files:** DashboardPage.tsx (line 35 `.catch(console.error)`), AgentsPage.tsx (line 35 `.catch(console.error)`), CalendarMeetings.tsx (line 12 `.catch(() => {})` — empty catch)
-**Finding:** Users see stale/empty data with no error UI. The calendar catches silently and does nothing. Dashboard catches and logs to console only.
-**Severity:** High
+6. **`/api/data` route has NO auth middleware**
+   - File: `apps/api/src/routes/data.ts`
+   - The router never calls `data.use(authMiddleware)` (unlike all other routers)
+   - All data queries (companies, agents, tasks, events) expose company-scoped data without authentication
+   - Evidence: No `authMiddleware` import or `.use()` call in data.ts
 
-### 5.3 CalendarMeetings has broken arrow rendering
-**File:** `apps/web/src/pages/CalendarMeetings.tsx`, lines 55-56
-**Finding:** Month nav buttons use `{"<<"}` which should render `<<` but due to JSX, this may render literal braces. Same for `{">>"}`.
-**Severity:** Low
+7. **N+1 query pattern in task router**
+   - File: `apps/api/src/routes/tasks.ts:47-53`
+   - After fetching N tasks, it does a separate query for agent names: `db.select().from(agents).where(... IN agentIds)`
+   - This is technically O(1) extra query, but the pattern of fetching tasks THEN enriching is repeated across multiple routes (tasks, agents, calendar, files)
+   - Impact: Multiple sequential queries on every request
 
-### 5.4 Empty states are basic text messages
-**All pages:** Show "No agents yet", "No tasks", "No messages yet" — functional but no illustrations or helpful guidance.
-**Severity:** Low
+8. **Company members JOIN on every route**
+   - File: `apps/api/src/routes/dashboard.ts:21`, tasks.ts:35, agents.ts:28, etc.
+   - Every route does `innerJoin(companyMembers)` to scope queries to the user's companies
+   - No index on `companyMembers.userId` or `companyMembers.companyId` is defined in the schema
+   - Impact: Table scan on company_members for every request
 
-### 5.5 CompanySettings save shows fake success
-**File:** `apps/web/src/pages/CompanySettings.tsx`
-**Finding:** Clicking "Save Changes" shows a green "Settings saved!" toast but nothing was persisted. This misleads the user.
-**Severity:** High
+9. **Duplicate import of `sql` in index.ts**
+   - File: `apps/api/src/index.ts:4,37`
+   - `import { sql } from "drizzle-orm"` appears twice
+   - Harmless but indicates sloppy code review
 
-### 5.6 CompanySettings invite button uses alert()
-**Finding:** `alert("Invitation feature coming soon")` — blocks the entire browser UI with a native dialog.
-**Severity:** Low
-
-### 5.7 No offline/disconnected state handling
-**All pages:** If the API server dies, pages show empty data with no "server unavailable" banner. No retry mechanism.
-**Severity:** Medium
-
----
-
-## 6. Reliability Issues
-
-### 6.1 CompanySettings has no loading state but calls companies API
-**File:** `apps/web/src/pages/CompanySettings.tsx`
-**Finding:** Uses `company` and `companies` from AuthContext but has no `loading` guard. If AuthContext hasn't finished fetching during render, `company?.name` returns `""` (falsy). The form initializes with empty values, then a re-render from the useEffect updates them — causes a flash of empty inputs.
-**Severity:** Low
-
-### 6.2 TaskBoard silently ignores POST failures
-**File:** `apps/web/src/pages/TaskBoard.tsx`, line 71
-**Finding:** `if (res.ok)` checks response status but `res.json()` on error responses (like 500) may not have a `task` field. If `res.ok` is false, the task form stays open with no error displayed.
-**Severity:** Medium
-
-### 6.3 AgentsPage reloads page on create
-**File:** `apps/web/src/pages/AgentsPage.tsx`, line 58
-**Finding:** `window.location.reload()` after successful agent creation. This is a full page reload, causing a flash and re-fetching all data. Should instead append the new agent to the state array.
-**Severity:** Low
-
-### 6.4 FileHub uses window.location.reload() after upload
-**File:** `apps/web/src/pages/FileHub.tsx`, line 34
-**Finding:** Same pattern — full page reload instead of optimistic update.
-**Severity:** Low
-
-### 6.5 CalendarMeetings, ChatJournal, FileHub have no auth context dependency
-**Files:** CalendarMeetings.tsx, ChatJournal.tsx, FileHub.tsx
-**Finding:** These pages do not import `useAuth` (except for company in future). They fire API calls on mount regardless of whether the user is authenticated or has a company selected. If the user has no company, the calls may return 401 and fail silently.
-**Evidence:** Only TaskBoard, DashboardPage, AgentsPage, CompanyOrg use `useAuth()`.
-**Severity:** Medium
-
-### 6.6 ChatJournal uses Date.now() as IDs
-**File:** `apps/web/src/pages/ChatJournal.tsx`, lines 40, 52
-**Finding:** `Date.now().toString()` used as message IDs. If two messages sent in the same millisecond (unlikely but possible), IDs collide. More importantly, these are client-side IDs that mismatch with any real backend IDs.
-**Severity:** Low
-
-### 6.7 Duplicate dependency: react-router-dom + react-router
-**File:** `apps/web/package.json`, lines 12-13
-**Finding:** Both `react-router` and `react-router-dom` v7 are installed. React Router v7 merged these — only `react-router` is needed. `react-router-dom` re-exports `react-router`. Wastes ~200KB.
-**Severity:** Low (tech debt)
+10. **Missing DELETE endpoints for several resources**
+    - Tasks: No `DELETE /tasks/:taskId` route exists
+    - Agents: `DELETE /agents/:agentId` exists but has no cascade logic for linked tasks, logs, execution runs
+    - Skills: `DELETE /skills/:skillId` exists but doesn't clean up `agentSkills` join table rows
+    - Evidence: grep for DELETE in route files
 
 ---
 
-## 7. Performance Findings
+## Suspected Findings (Requires Runtime Verification)
 
-### 7.1 No database indexes on foreign keys
-**File:** `apps/api/src/db/schema.ts`
-**Finding:** All 8 tables have foreign key constraints but no explicit indexes. Drizzle ORM does not create indexes automatically unless specified.
-**Evidence:** No `index()` calls in schema.ts. migrate.ts only creates tables, not indexes.
-**Impact:** `WHERE company_id = $1` queries full-scan. At scale (>10k rows per table), this degrades.
-**Severity:** Medium
+11. **Drizzle migrations may not be synced with schema.ts**
+    - File: `apps/api/src/db/migrate.ts`
+    - The schema has 18 tables but we cannot verify `drizzle.config.ts` or migration files exist
+    - Missing column on `executionRuns` table (missing `scratchpad` which is referenced in hermes-bridge.ts)
+    - Requires: Run `drizzle-kit generate --diff` or inspect migration directory
 
-### 7.2 Dashboard fetches entire events list
-**File:** `apps/api/src/routes/dashboard.ts`, lines 61-66
-**Finding:** `SELECT ... FROM events WHERE company_id = $1 ORDER BY created_at DESC LIMIT 50` — hardcoded limit, no offset/cursor parameter.
-**Severity:** Low (acceptable for current scale)
+12. **`executionRuns.companyId` — likely missing column**
+    - Schema line 162: `companyId: uuid("company_id").notNull().references(() => companies.id)`
+    - This is defined in schema.ts but we cannot confirm it exists in the running DB
+    - Evidence: Hermes bridge code fetches `companyId` from projects/tasks JOIN rather than from executionRuns directly, suggesting the column may not exist at runtime
 
-### 7.3 Multiple sequential fetches without batching
-**File:** `apps/web/src/pages/ChatJournal.tsx`, lines 24-28
-**Finding:** Uses `Promise.all` — good. But `DashboardPage.tsx` does one fetch, `AgentsPage.tsx` does one fetch. No shared response caching.
-**Severity:** Low
+13. **CEO orchestrator crash behavior**
+    - `apps/api/src/server.ts:17` calls `startCEOOrchestrator()` which starts immediately on server boot
+    - If the orchestrator encounters an uncaught exception in its tick, it logs to console but the setInterval continues
+    - However, the OOM crash kills the entire process including the orchestrator
+    - Requires: Verify orchestrator survives individual tick failures
 
-### 7.4 Vite proxy adds network hop
-**File:** `apps/web/vite.config.ts`, line 10-11
-**Finding:** Every `/api` request goes through Vite dev server → Hono. Adds ~5ms latency per request. Only relevant in dev mode.
-**Severity:** None (dev only)
-
-### 7.5 No React.memo, useMemo, or useCallback (except TaskBoard)
-**Files:** DashboardPage.tsx, AgentsPage.tsx, CompanySettings.tsx, etc.
-**Finding:** Only TaskBoard uses `useCallback` (lines 48-61). Other components re-create inline functions on every render.
-**Severity:** Low (React 18 auto-batching handles most cases)
+14. **SSE /realtime endpoint may not work behind Docker Compose**
+    - File: `apps/api/src/routes/realtime.ts`
+    - Server-Sent Events require persistent connections — the API server + Vite proxy may close idle connections
+    - Requires: Verify SSE connection persists for >60s
 
 ---
 
-## 8. Security Findings
+## UX/UI Issues
 
-### 8.1 P0 fixes applied in this session (confirmed)
-| Issue | Fix | Status |
-|-------|-----|--------|
-| tasks route not mounted | Added import + mount in index.ts | FIXED |
-| data.ts endpoints unprotected | Added authMiddleware + company filtering | FIXED |
-| OpenClaw webhook unprotected | Added X-Webhook-Secret header check | FIXED |
-| Agent PUT/DELETE no authz | Added company membership check | FIXED |
-| JWT_SECRET default | Runtime guard in production | FIXED |
+15. **All inline styles — no design system**
+    - Every page component uses inline style objects with hardcoded colors, padding, etc.
+    - Duplicate patterns across 16+ pages (same input styles, same button styles, same modal patterns)
+    - Theme toggle exists (`ThemeToggle.tsx`) but appears to only toggle a class — actual inline styles don't respond to it
+    - Evidence: grep for `style={{` across all page files
 
-### 8.2 No input validation on any POST endpoint
-**Files:** `apps/api/src/routes/auth.ts`, `routes/agents.ts`, `routes/tasks.ts`, etc.
-**Finding:** All POST endpoints use `await c.req.json()` without schema validation. Invalid payloads (missing fields, wrong types, extremely long strings) reach Drizzle queries directly.
-**Evidence:** No zod, joi, or custom validation anywhere in the codebase. grep for "zod" returns zero matches in apps/api.
-**Severity:** High
-**Risk:** Data corruption, 500 errors, potential SQL injection (mitigated by Drizzle parameterization, but logic errors still possible)
+16. **No loading states visible in code**
+    - Pages fetch data with `fetch()` + `useEffect` + `useState`
+    - No loading state displayed during fetch (empty arrays or undefined render immediately)
+    - Evidence: DashboardPage, AgentsPage, TaskBoard all set state with `setX(data)` without a `setLoading(true)` pattern
 
-### 8.3 No CSRF protection
-**File:** `apps/api/src/middleware/auth.ts`
-**Finding:** JWT stored in httpOnly cookie with `sameSite: "Strict"`. This provides good CSRF protection for same-site requests. However, if any route allows CORS with `credentials: true` from an attacker origin, the cookie would be sent.
-**Current CORS:** Allows `localhost:5173` and `localhost:3000` only — safe for dev. Production CORS needs review.
-**Severity:** Low (currently safe; needs review for production) SameSite=Strict already provides strong CSRF protection
+17. **No error boundaries on individual pages**
+    - App.tsx wraps everything in ErrorBoundary, but individual route components lack error boundaries
+    - A single page crash brings down the entire app
+    - Evidence: Only App.tsx and one nested route in App.tsx:89 use ErrorBoundary
 
-### 8.4 Password hashing
-**File:** `apps/api/src/routes/auth.ts`, line 24
-**Finding:** Uses `bcrypt.hash(password, 12)` — cost factor 12, which is appropriate. Good.
-**Severity:** None (correctly implemented)
+18. **No empty states**
+    - When company/agents/tasks arrays are empty, pages render nothing or a blank list
+    - No "Get started" or "Create your first..." prompts
+    - Evidence: No conditional `if (items.length === 0)` with friendly messaging in any page
 
-### 8.5 No password strength validation
-**File:** `apps/api/src/routes/auth.ts`, line 16
-**Finding:** Accepts password of any length, including "1" or "". No complexity requirements.
-**Severity:** Medium
+19. **Company wizard assumes fresh company**
+    - CompanyWizard.tsx creates a company + projects + agents in one flow
+    - If registration created a company (via `/auth/register`), the wizard creates a duplicate
+    - Evidence: Registration creates a company with name + "General Operations" project + "Founder" agent
 
-### 8.6 No email format validation
-**File:** `apps/api/src/routes/auth.ts`, line 16
-**Finding:** Email is accepted as any string. No `@` check, no RFC validation.
-**Severity:** Medium
-
-### 8.7 JWT has no token revocation
-**File:** `apps/api/src/routes/auth.ts`
-**Finding:** Logout deletes the cookie client-side but cannot invalidate a server-side token. A stolen JWT remains valid for 30 days (exp: `86400 * 30`).
-**Severity:** Low (acceptable for MVP; standard for stateless JWT)
-
-### 8.8 Calendar, chat, files, journal routes have no auth middleware (but also no mount)
-**Files:** `routes/calendar.ts`, `chat.ts`, `files.ts`, `journal.ts`, `realtime.ts`
-**Finding:** None of these route files call `use(authMiddleware)`. If they were mounted, they'd be accessible without authentication.
-**Evidence:** `grep authMiddleware apps/api/src/routes/{calendar,chat,files,journal,realtime,openclaw}.ts` returns 0 matches.
-**Severity:** Medium (mitigated by not being mounted, but still a vulnerability if someone adds the mount)
+20. **No pagination in any list view**
+    - All GET endpoints return all rows (limited to 500 max in some routes)
+    - No cursor-based or offset pagination
+    - Evidence: `limit: 500` hardcoded in multiple routes
 
 ---
 
-## 9. Integration and Dependency Risks
+## Reliability Issues
 
-### 9.1 OpenClaw connector — incomplete integration
-**Files:** `apps/api/src/connectors/openclaw.ts`, `openclaw-poll.ts`
-**Finding:**
-- `normalizeEvent()` exists and is used (confirmed)
-- `pollGateway()` returns empty array `[]` — stub
-- Webhook endpoint POST /connectors/openclaw is mounted and secured
-**Status:** Partially functional. Webhook accepts events. Polling is incomplete.
+21. **Unbounded in-memory rate limiter**
+    - File: `apps/api/src/middleware/rate-limiter.ts`
+    - The `attempts` Map grows unbounded — cleanup only runs every 60s via setInterval
+    - During an attack, memory could grow significantly
+    - Note: This IS cleaned up every 60s by `cleanupRateLimiter()` in server.ts
 
-### 9.2 Goals table has no API routes
-**Files:** `apps/api/src/db/schema.ts` (goals table)
-**Finding:** DB schema defines `goals` table with id, companyId, title, description, parentId, progress. No route accesses it. Dashboard computes `goalProgress` from this table, but without routes, no client can create or update goals.
-**Severity:** Medium (dead data structure)
+22. **No retry or exponential backoff for failed executions**
+    - File: `apps/api/src/execution/dispatcher.ts`
+    - If Hermes dispatch fails, the execution run is re-queued but with no retry limit
+    - File: `apps/api/src/routes/tasks.ts` — `retryCount` field exists but isn't incremented or checked
+    - Evidence: `retryCount` column in schema (line 74), but never read in any route or orchestrator
 
-### 9.3 Shared package is underutilized
-**Files:** `packages/shared/src/types.ts`, `packages/shared/src/schemas.ts`
-**Finding:** Only `roleSchema` (Zod enum) and `Role` type exist in shared. No DTO schemas, no API request/response types, no validation schemas used by the API.
-**Evidence:** `grep shared apps/api/src/` returns 0 matches for actual usage of shared schemas.
+23. **Silent skill assignment failures**
+    - File: `apps/api/src/routes/agents.ts:103-112`
+    - Skill assignment loop catches errors and silently skips: `try { await db.insert(...) } catch { /* skip */ }`
+    - No logging, no user feedback
+
+24. **`task-execution.ts` pattern-matching executor is brittle**
+    - File: `apps/api/src/task-execution.ts`
+    - Task execution is based on keyword matching in title/description: `if (fullText.includes("hire") ...)`
+    - Easily triggered by false positives (e.g., a task "Review hiring policy" triggers the hiring flow)
+    - No LLM-based intent classification — despite having an LLM provider layer
+
+25. **`task-exec.ts` is dead code**
+    - File: `apps/api/src/task-exec.ts`
+    - Marked as DEPRECATED in comments but still imported by `utils/task-runner.ts`
+    - The module-level comment says "Not wired into server.ts" but server.ts starts the orchestrator which uses task-runner which... may or may not use this
+
+26. **No transaction wrapping for task creation**
+    - File: `apps/api/src/routes/tasks.ts:82-88`
+    - Task insert is not wrapped in a transaction — if subsequent operations fail, the orphaned task remains
+    - Contrast with `dashboard.ts:52` which properly uses `db.transaction()`
 
 ---
 
-## 10. Top Priorities
+## Performance Findings
 
-1. **Mount calendar, chat, files, journal, realtime routes in index.ts** — 5 pages currently hit 404. Quick fix: add `app.route("/api", calendar)` etc.
-2. **Implement actual backend for calendar, chat, files, journal** — current route implementations are stubs (`{ok: true}`). Need DB tables and CRUD logic.
-3. **Fix CompanySettings save and invite** — save shows fake success, invite is an alert.
-4. **Fix CalendarMeetings endpoint mismatch** — frontend calls GET /api/calendar, backend defines POST /meetings.
-5. **Fix CompanySettings member list bug** — shows companies instead of members.
-6. **Add input validation** (zod schemas) to all POST endpoints.
-7. **Add database indexes** on foreign keys.
-8. **Add error banners** instead of silent catches.
-9. **Fix ChatJournal and Calendar company scoping** — currently no company context.
-10. **Remove orphaned components** (Sidebar.tsx, TopBar.tsx, KpiTiles.tsx, etc.) or wire them in.
+27. **No database indexes defined**
+    - Schema uses only `primaryKey()` and `.unique()` — no `.index()` calls
+    - All foreign key columns lack indexes (companyId, projectId, agentId, userId, taskId)
+    - Impact: Full table scans on JOINs for every query
+
+28. **`pnpm install` runs on every container start**
+    - Dockerfile cmd: `CI=true pnpm install && pnpm -C apps/api exec tsx src/db/migrate.ts && ...`
+    - This runs on every container restart, adding 30-60s to startup
+    - Impact: Slow development iteration and redeployment
+
+29. **Vite dev server runs in production Docker**
+    - The Dockerfile doesn't distinguish dev and production — it always starts both `tsx src/server.ts` (API) and `pnpm -C apps/web dev --host` (Vite)
+    - Vite dev server includes HMR, source maps, and full source — significant overhead
+    - A production Dockerfile (`Dockerfile.production`) exists but is not used by docker-compose.yml
+
+30. **No request caching or response caching**
+    - Every GET request hits the database directly
+    - Dashboard stats, company lists, agent lists are queried on every page load with no caching
+    - Evidence: No Redis or in-memory cache layer for GET responses
 
 ---
 
-## 11. Unknowns and Blockers
+## Security Findings
 
-| Unknown | Why unknown | How to resolve |
-|---------|------------|----------------|
-| Whether Vite proxy correctly forwards cookies | Cannot test in this environment | Runtime: login in browser, inspect cookie on /api requests |
-| Whether OpenClaw webhook secret env var is set | No .env file in repo | Check deployment env vars for OPENCLAW_WEBHOOK_SECRET |
-| Database performance at scale | No real data loaded yet | Load test with seeded data |
-| Whether `gen_random_uuid()` works in Postgres 16 Alpine | Depends on pgcrypto extension | Runtime: check table creation logs |
-| Browser behavior with SameSite=Strict cookie across port boundaries | Depends on browser version | Runtime: DevTools > Application > Cookies |
-| Test coverage quality | Test files exist but results not verified | Run `pnpm test` and review coverage |
-| Whether Drizzle schema matches actual migrated tables | Manual SQL migration vs declarative Drizzle schema — no drift detection | Compare schema.ts with db/migrate.ts or use `drizzle-kit diff` |
+31. **Exposed secrets in source code**
+    - `DATABASE_URL` contains hardcoded password in docker-compose.yml (line 32): `postgresql://postgres:***@...`
+    - File: `apps/api/src/db/client.ts:4` — same pattern with `postgres:***`
+
+32. **JWT secret is guessable in development**
+    - `dev-secret-change-in-production` is the fallback
+    - Anyone on the same network can forge tokens for any user
+    - No token rotation or revocation
+
+33. **No rate limiting on non-auth routes**
+    - Rate limiter is only applied to `/auth/register` and `/auth/login` (manually checked in auth.ts)
+    - Other mutation endpoints (POST /companies, POST /agents, POST /tasks) have no rate limiting
+    - Evidence: `rateLimitMiddleware` is imported only in auth.ts
+
+34. **API keys stored in plaintext**
+    - File: `apps/api/src/db/schema.ts:214` — `apiKey: text("api_key")` in llmProviders table
+    - No encryption at rest for API keys
+    - LLM provider API keys returned in API responses (need to verify if filtered server-side)
+
+35. **File upload has no virus/type scanning**
+    - File: `apps/api/src/routes/files.ts`
+    - Files are saved to disk with sanitized names but no content type verification
+    - 50MB size limit exists (good), but no file extension whitelist
+
+36. **IDOR potential on several endpoints**
+    - Some endpoints check company membership after fetching by ID, but the pattern is inconsistent:
+      - `GET /agents/:id/skills` checks company membership
+      - `PUT /agents/:id` checks company membership
+      - But `GET /agents` returns ALL agents for ALL user's companies in one call — information disclosure across companies
+    - Evidence: `dashboard.ts:11` — returns all companies for user without filtering by active context
+
+---
+
+## Integration and Dependency Risks
+
+37. **OpenClaw connector is stub-only**
+    - File: `apps/api/src/connectors/openclaw.ts`
+    - Has validateWebhook, normalizeEvent, discoverAgents, autoConfigure
+    - BUT discoverAgents only fetches `/api/agents` — no actual OpenClaw integration is wired upstream
+    - Webhook endpoint exists in connectors.ts:132 but never creates events, agents, or tasks from incoming webhooks
+
+38. **Hermes dispatch is one-way**
+    - The bridge pushes queued runs to Hermes via webhook
+    - Hermes reports back via `/api/executions/:runId/events` and `/api/executions/:runId/result`
+    - BUT the bridge only polls for `queued` status — if Hermes takes longer than the poll interval, duplicate dispatches may occur
+    - Evidence: `hermes-bridge.ts:17` — only checks `status = 'queued'`, doesn't transition to prevent re-dispatch
+
+39. **No health check on the orchestrator**
+    - `startCEOOrchestrator()` starts an interval with no monitoring
+    - If the interval callback throws, it's caught and logged, but there's no alerting or restart mechanism
+    - The orchestrator can be silently broken while the API serves requests normally
+
+---
+
+## Top Priorities
+
+1. Fix DATABASE_URL password — immediate blocker for all operations
+2. Fix OOM crash — set NODE_OPTIONS max-old-space-size
+3. Fix hermes-bridge Docker configuration
+4. Add auth middleware to /api/data route (security vulnerability)
+5. Replace hardcoded JWT_SECRET with proper secret generation
+6. Fix entrypoint/command for hermes-bridge container
+7. Add database indexes on foreign key columns
+8. Implement proper pagination for list endpoints
+9. Add error boundaries and loading states to frontend
+10. Clean up dead code (task-exec.ts, unused routes)
+
+## Unknowns and Blockers
+
+- **Migration state**: Cannot verify if DB schema matches schema.ts (no migration files visible, no drizzle.config.ts found)
+- **LLM provider configuration**: `/brain` page exists but cannot test if LLM calls actually work (no API key configured)
+- **SSE /realtime endpoint**: Cannot verify persistent connection works behind Docker Compose networking
+- **File storage at scale**: Local disk storage works for dev but has no cloud storage provider fallback
+- **Multi-company isolation**: Users can be members of multiple companies, but there's no "active company" context selection in the auth flow — all queries return data from ALL companies the user belongs to
+- **audit_log table**: Middleware inserts into `audit_log` table but this table is NOT defined in schema.ts — likely a runtime error on first mutation

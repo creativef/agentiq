@@ -1,120 +1,226 @@
 {
-  "generated_at": "2026-04-02",
-  "commit": "5bfc9f4",
-  "audit_scope": "full-codebase",
-  "runtime_verified": false,
   "features": [
     {
-      "name": "Authentication (login/register/logout/me)",
-      "status": "fully_functional",
-      "confidence": "high",
-      "evidence": "auth.ts has full CRUD with bcrypt, JWT in httpOnly cookies. AuthContext.tsx wires login/register/logout/logout. ProtectedRoute gates all dashboard routes.",
-      "blockers": null,
-      "recommended_next_step": "Add input validation (zod) for email format and password strength."
+      "name": "User Registration & Login",
+      "status": "Partially Operational",
+      "confidence": "High",
+      "evidence": "POST /auth/register and POST /auth/login exist (auth.ts). Registration creates user, company, project, and default agent. JWT token set as httpOnly cookie. AuthContext.tsx manages session state. LOGIN currently returns 500 due to DB password issue.",
+      "blockers": [
+        "DATABASE_URL password = '***' causes auth to fail",
+        "JWT_SECRET is default dev value"
+      ],
+      "recommended_next_step": "Fix DATABASE_URL password and regenerate JWT_SECRET"
     },
     {
-      "name": "Dashboard (KPIs, status wall, activity timeline)",
-      "status": "fully_functional",
-      "confidence": "high",
-      "evidence": "dashboard.ts computes stats/agents/events from DB. DashboardPage.tsx fetches and renders KPIs, agent status tiles, event timeline. Routing is nested and correct.",
-      "blockers": null,
-      "recommended_next_step": "Add error handling UI for failed fetches."
+      "name": "Company Management",
+      "status": "Partially Operational",
+      "confidence": "High",
+      "evidence": "GET/POST /companies (dashboard.ts), CompanyWizard.tsx creates full company with projects/agents. Company settings page exists. But DB connection breaks all queries.",
+      "blockers": [
+        "DATABASE_URL password issue"
+      ],
+      "recommended_next_step": "Verify company creation flow works after DB fix, test CompanyWizard end-to-end"
     },
     {
-      "name": "Company Management (list, create, switch)",
-      "status": "fully_functional",
-      "confidence": "high",
-      "evidence": "GET/POST /companies in dashboard.ts. Company switcher in DashboardLayout and DashboardPage. AuthContext loads companies on mount.",
-      "blockers": null,
-      "recommended_next_step": null
+      "name": "Dashboard Stats",
+      "status": "Partially Operational",
+      "confidence": "High",
+      "evidence": "GET /dashboard/:companyId/stats returns agents count, task counts by status, recent events. No pagination.",
+      "blockers": [
+        "API OOM crash",
+        "No indexes on foreign keys degrades performance at scale"
+      ],
+      "recommended_next_step": "Add pagination, verify stats accuracy with seeded data"
     },
     {
-      "name": "Agents (list/create/update/delete)",
-      "status": "fully_functional",
-      "confidence": "high",
-      "evidence": "agents.ts has full CRUD with authz checks (company membership verified). AgentsPage.tsx has 150-line component with create form, status controls, delete. PUT/DELETE now have authz checks (P0 fix applied).",
-      "blockers": null,
-      "recommended_next_step": "Remove window.location.reload() after create, use optimistic state update."
-    },
-    {
-      "name": "Tasks (kanban CRUD, drag-drop)",
-      "status": "fully_functional",
-      "confidence": "high",
-      "evidence": "tasks.ts has full CRUD. TaskBoard.tsx has kanban with 5 columns, drag-drop, create form, delete. Tasks route mounted in index.ts (P0 fix applied).",
-      "blockers": null,
-      "recommended_next_step": null
-    },
-    {
-      "name": "Calendar & Meetings",
-      "status": "non_functional",
-      "confidence": "high",
-      "evidence": "CalendarMeetings.tsx is a complete 77-line component with month grid and event form. BUT: calendar.ts only has POST /meetings -> {ok: true}. Frontend calls GET /api/calendar (wrong path). Route is not mounted in index.ts. Form onSubmit is e.preventDefault() only.",
-      "blockers": "Missing calendar_events DB table, missing GET endpoint, route not mounted, form submission stub",
-      "recommended_next_step": "Create calendar_events table, add GET /calendar and POST /calendar endpoints, mount route, wire form submission. T-01, T-02, T-06."
-    },
-    {
-      "name": "Chat & Journal",
-      "status": "non_functional",
-      "confidence": "high",
-      "evidence": "ChatJournal.tsx is complete (110 lines) with chat messages and journal tabs. BUT: chat.ts has POST /chat -> {ok: true} only (no GET). journal.ts: GET /journal -> {ok: true}. Neither route is mounted. No chat_messages or journal_entries tables exist.",
-      "blockers": "Missing DB tables (chat_messages, journal_entries), routes not mounted, no GET for chat, no POST for journal",
-      "recommended_next_step": "Create DB tables, implement GET/POST for both, mount routes. T-01, T-07, T-08."
-    },
-    {
-      "name": "File Hub",
-      "status": "non_functional",
-      "confidence": "high",
-      "evidence": "FileHub.tsx is complete (93 lines) with upload UI, file list, size formatting. BUT: files.ts has POST /files -> {ok: true} only. No file storage, no GET endpoint. Route not mounted.",
-      "blockers": "No file storage layer, no files metadata table, route not mounted",
-      "recommended_next_step": "Decide storage strategy (local vs cloud), create files table, implement GET/POST with multipart, mount route. T-01, T-09."
+      "name": "Agent Management",
+      "status": "Partially Operational",
+      "confidence": "High",
+      "evidence": "Full CRUD: GET/POST/PUT/DELETE /companies/:id/agents. Agent activity logs, skill assignment, heartbeat endpoint (POST /agents/:id/heartbeat). Org chart uses @xyflow/react. No DELETE cascade for dependent records.",
+      "blockers": [
+        "No cascade on delete leaves orphaned agentSkills, agentLogs, executionRuns",
+        "Silent skill assignment failures"
+      ],
+      "recommended_next_step": "Add cascade delete, fix silent skill failures, verify org chart renders with real data"
     },
     {
       "name": "Org Chart",
-      "status": "partially_operational",
-      "confidence": "high",
-      "evidence": "CompanyOrg.tsx renders hierarchical view (CEO -> Manager -> Agent). Fetches from /companies/:id/agents (reuses agents endpoint). Only shows AI agents, not real people/company_members.",
-      "blockers": "No distinction between agents and human members. company_members table not exposed.",
-      "recommended_next_step": "Either extend agents to include human roles or create dedicated members endpoint."
+      "status": "Partially Operational",
+      "confidence": "Medium",
+      "evidence": "CompanyOrg.tsx exists, uses @xyflow/react. reportsTo and altReportsTo fields in agents schema. CompanyOrg fetches agents, transforms to React Flow nodes/edges. Cannot verify visual rendering without runtime test.",
+      "blockers": [
+        "Cannot verify visual rendering without working runtime",
+        "Depends on reportsTo/altReportsTo being populated"
+      ],
+      "recommended_next_step": "Runtime verification once DB is fixed"
     },
     {
-      "name": "Company Settings",
-      "status": "partially_operational",
-      "confidence": "high",
-      "evidence": "CompanySettings.tsx has company info form (name, goal) and member list. Save button shows fake toast. Member list shows companies[] instead of users. No PUT /companies/:id endpoint exists. Invite is alert().",
-      "blockers": "No PUT companies endpoint, no dedicated members endpoint, members populated with wrong data",
-      "recommended_next_step": "Implement PUT /companies/:id, GET /companies/:id/members, fix member population. T-04, T-05."
+      "name": "Task Board & Execution Engine",
+      "status": "Partially Operational",
+      "confidence": "High",
+      "evidence": "Full CRUD: GET/POST/PUT /tasks, approval system (POST /tasks/:id/approve), enqueueExecution + dispatcher for Hermes integration, local pattern-matching executor (task-execution.ts). TaskBoard.tsx renders kanban. No DELETE endpoint. retryCount defined but unused.",
+      "blockers": [
+        "Hermes bridge container fails to start",
+        "Local executor uses brittle keyword matching",
+        "No retry logic despite retryCount column",
+        "Missing DELETE endpoint"
+      ],
+      "recommended_next_step": "Fix hermes-bridge, add DELETE endpoint, implement retry logic"
     },
     {
-      "name": "OpenClaw Connector",
-      "status": "partially_operational",
-      "confidence": "high",
-      "evidence": "POST /connectors/openclaw is mounted and secured (webhook secret header check, companyId extraction, normalizeEvent). pollGateway returns [] (stub). No UI for configuration.",
-      "blockers": "pollGateway is stub. OPENCLAW_WEBHOOK_SECRET must be set in env (not in repo).",
-      "recommended_next_step": "Implement actual OpenClaw polling. Add webhook secret to deployment env vars."
+      "name": "Task History & Reports",
+      "status": "Present but Incomplete",
+      "confidence": "Medium",
+      "evidence": "TaskHistory.tsx and ReportsPage.tsx exist. API has GET /history and GET /reports/daily (likely in routes or embedded in dashboard). Cannot confirm route existence without full read.",
+      "blockers": [
+        "Cannot confirm route files exist for history and daily reports"
+      ],
+      "recommended_next_step": "Verify routes exist, add missing report generation"
+    },
+    {
+      "name": "Projects",
+      "status": "Fully Functional",
+      "confidence": "High",
+      "evidence": "Complete CRUD: GET/POST/PUT/DELETE /companies/:id/projects, GET /projects/:id/stats. Proper auth checks on all endpoints. ProjectsPage.tsx matches.",
+      "blockers": [
+        "DELETE has no cascade (orphaned tasks remain)"
+      ],
+      "recommended_next_step": "Add cascade delete for project -> tasks"
+    },
+    {
+      "name": "Skills System",
+      "status": "Partially Operational",
+      "confidence": "Medium",
+      "evidence": "Full CRUD: GET/POST/PUT/DELETE /skills, agent-skill CRUD via /agents/:id/skills. Skills embedded in AgentsPage.tsx. No dedicated skills page. Silent failures on assignment.",
+      "blockers": [
+        "No skill import/ingestion from files",
+        "Silent failures on invalid skillIds",
+        "Cannot assign skills without creating them first (no bulk import)"
+      ],
+      "recommended_next_step": "Add skill import feature, fix silent failure handling"
+    },
+    {
+      "name": "CEO Autonomous Orchestration",
+      "status": "Non-Functional",
+      "confidence": "High",
+      "evidence": "CEOOrchestrator class with 30s tick: context builder, LLM decider, task router, action executor, team assessor, report generator, task monitor. Starts in server.ts:17. Self-executes tasks assigned to CEO agent. But OOM kills entire process at startup.",
+      "blockers": [
+        "API process crashes OOM before orchestrator can run",
+        "LLM provider must be configured for reasoning (no fallback when no LLM configured)",
+        "orchestrator/llm-decider.ts requires LLM config to make decisions"
+      ],
+      "recommended_next_step": "Fix OOM crash, add graceful degradation when no LLM provider configured"
+    },
+    {
+      "name": "Chat / AI Assistant",
+      "status": "Partially Operational",
+      "confidence": "Medium",
+      "evidence": "chatMessages table, GET/POST /chat/messages routes, ChatJournal.tsx page. LLM-based responses supported (uses llm/provider.ts). Cannot verify LLM integration works without configured provider.",
+      "blockers": [
+        "Requires active LLM provider for AI responses",
+        "Cannot verify without runtime test"
+      ],
+      "recommended_next_step": "Configure LLM provider, test chat-to-LLM integration"
+    },
+    {
+      "name": "Journal",
+      "status": "Fully Functional",
+      "confidence": "High",
+      "evidence": "journalEntries table, GET/POST/DELETE /journal route, JournalPage.tsx. Simple CRUD with proper auth checks. No editing (only create/delete).",
+      "blockers": [
+        "Cannot EDIT journal entries (only create and delete)",
+        "Auto-creates entry in user's first company, no company selector"
+      ],
+      "recommended_next_step": "Add PUT /journal/:id for editing"
+    },
+    {
+      "name": "Calendar",
+      "status": "Fully Functional",
+      "confidence": "High",
+      "evidence": "calendarEvents table, GET/POST/PUT /calendar with month filtering. CalendarMeetings.tsx renders events. Agent enrichment via join. No DELETE endpoint.",
+      "blockers": [
+        "Missing DELETE /calendar/:id endpoint"
+      ],
+      "recommended_next_step": "Add calendar event deletion"
+    },
+    {
+      "name": "File Hub",
+      "status": "Partially Operational",
+      "confidence": "Medium",
+      "evidence": "files table, GET/POST /files with multipart upload, GET /files/:id/download. 50MB limit, filename sanitization. Local disk storage. FileHub.tsx renders. No virus scanning, no extension whitelist.",
+      "blockers": [
+        "No file type validation",
+        "Local-only storage (no cloud backup in Docker)",
+        "DELETE endpoint missing"
+      ],
+      "recommended_next_step": "Add file type validation, DELETE endpoint, and cloud storage option"
+    },
+    {
+      "name": "LLM Provider Configuration",
+      "status": "Partially Operational",
+      "confidence": "Medium",
+      "evidence": "llmProviders table, GET/POST/PUT/DELETE /llm/providers routes, LLM provider abstraction (OpenAI, Anthropic, OpenAI-compatible, Ollama, local). LLMConfigPage.tsx exists. Test connection endpoint exists. But no LLM provider is active by default.",
+      "blockers": [
+        "No active LLM provider after initial setup (CEO orchestrator cannot reason)",
+        "API keys stored in plaintext",
+        "Cannot verify test-connection works"
+      ],
+      "recommended_next_step": "Add 'test connection' validation, require at least one active provider for CEO"
+    },
+    {
+      "name": "Company Briefs",
+      "status": "Fully Functional",
+      "confidence": "High",
+      "evidence": "companyBriefs table, full CRUD on /briefs route. CompanyBriefsPage.tsx with form for vision, market context, constraints, priorities. Proper auth checks.",
+      "blockers": [
+        "Briefs are not used by the CEO orchestrator (context-builder.ts doesn't reference them)"
+      ],
+      "recommended_next_step": "Wire briefs into CEO orchestrator context building"
+    },
+    {
+      "name": "Integrations / Connectors",
+      "status": "Present but Incomplete",
+      "confidence": "High",
+      "evidence": "Connector registry pattern (hermes, openclaw), webhook endpoint at /api/connectors/:platform/webhook, OpenClaw discoverAgents/autoConfigure. BUT webhook handler doesn't create events or sync data. It just validates and returns 200.",
+      "blockers": [
+        "Webhook received but no action taken \u2014 no events, agents, or tasks created from incoming webhooks",
+        "No OpenClaw integration wired upstream",
+        "Hermes connector validateWebhook always returns true (no verification)"
+      ],
+      "recommended_next_step": "Implement webhook event ingestion pipeline, wire OpenClaw agent sync"
     },
     {
       "name": "Goals",
-      "status": "not_implemented",
-      "confidence": "high",
-      "evidence": "goals table exists in DB (schema.ts line 67-75). No API routes. Dashboard.ts queries goals table for progress calc but no way to create/update goals from frontend.",
-      "blockers": "No API routes, no UI",
-      "recommended_next_step": "Create goals CRUD API and connect to Dashboard or Company Settings."
+      "status": "Fully Functional",
+      "confidence": "High",
+      "evidence": "goals table with parentId for hierarchy, full CRUD (GET/POST/PUT/DELETE /goals), progress tracking. Proper auth with company scoping.",
+      "blockers": [
+        "Goals are not linked to tasks or agents (informational only)"
+      ],
+      "recommended_next_step": "Add goal-to-task linking, auto-update progress from task completion"
     },
     {
-      "name": "Realtime Events",
-      "status": "not_implemented",
-      "confidence": "high",
-      "evidence": "realtime.ts: GET /events returns empty string ''. Route not mounted. No SSE/WebSocket implementation.",
-      "blockers": "No implementation, not mounted, not used by any frontend page",
-      "recommended_next_step": "Either implement SSE/EventSource or remove the stub."
+      "name": "Hermes Execution Bridge",
+      "status": "Non-Functional",
+      "confidence": "High",
+      "evidence": "hermes-bridge.ts loops every 10s polling for 'queued' execution runs. Dispatches to Hermes via webhook. Heroku bridge-loop.sh runs the loop. execution/dispatcher.ts creates run records. BUT Docker container fails with 'Cannot find module /app/bash'.",
+      "blockers": [
+        "Docker entrypoint misconfiguration prevents container startup",
+        "HERMES_BRIDGE_URL may resolve to host.docker.internal but Hermes may not be running",
+        "Potential duplicate dispatch if poll interval < Hermes processing time"
+      ],
+      "recommended_next_step": "Fix Docker config, ensure Hermes is running on port 8644, test end-to-end"
     },
     {
-      "name": "Data Queries (raw companies/events)",
-      "status": "partially_operational",
-      "confidence": "high",
-      "evidence": "data.ts has GET /companies and GET /events. Now secured with authMiddleware (P0 fix). Only used by orphaned CompanyPanel.tsx and Sidebar.tsx (not rendered in app).",
-      "blockers": "Endpoints serve orphaned components only",
-      "recommended_next_step": "Remove if truly unused, or wire into overview dashboard components."
+      "name": "Real-time Updates (SSE)",
+      "status": "Likely Non-Functional",
+      "confidence": "Medium",
+      "evidence": "realtime.ts implements Server-Sent Events with EventSource. Pushes updates to clients. But SSE requires persistent HTTP connections \u2014 may not work behind Docker Compose with proxy/Vite.",
+      "blockers": [
+        "Cannot verify SSE persistence behind Docker networking",
+        "No heartbeat/ping mechanism for connection keepalive"
+      ],
+      "recommended_next_step": "Test SSE in browser DevTools, add keepalive ping if needed"
     }
   ]
 }
