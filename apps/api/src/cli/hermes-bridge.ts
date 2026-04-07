@@ -105,6 +105,16 @@ Now execute the task "${taskRow[0].title}":`;
           status: "ready",
           retryCount: currentRetryCount + 1
         }).where(sql`${tasks.id} = ${run.taskId}`);
+        
+        // Reset execution run to queued for retry
+        await db.update(executionRuns).set({ 
+          status: "queued",
+          startedAt: null,
+          finishedAt: null,
+          result: null,
+          error: null
+        }).where(sql`${executionRuns.id} = ${run.id}`);
+        
         console.error(`Error executing ${run.id}: ${e.message}. Retry ${currentRetryCount + 1}/${MAX_RETRIES}`);
       } else {
         // Max retries exceeded, mark as permanently failed
