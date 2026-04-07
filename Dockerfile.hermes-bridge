@@ -3,15 +3,17 @@
 
 FROM node:20-alpine
 
-# Install Python and pip for Hermes CLI (venv is included in python3 package)
-RUN apk add --no-cache python3 py3-pip
+# Install Python and pip for Hermes CLI
+RUN apk add --no-cache python3 py3-pip curl wget git
 
-# Create and activate virtual environment for Hermes
-RUN python3 -m venv /opt/hermes-venv && \
-    /opt/hermes-venv/bin/pip install hermes-agent
-
-# Add Hermes to PATH
-ENV PATH="/opt/hermes-venv/bin:$PATH"
+# Install Hermes from NousResearch GitHub repo
+RUN echo "=== Installing Hermes from NousResearch/hermes-agent ===" && \
+    # Clone the repo
+    git clone https://github.com/NousResearch/hermes-agent.git /tmp/hermes-agent && \
+    cd /tmp/hermes-agent && \
+    # Install with pip (from the cloned repo)
+    pip install . --break-system-packages && \
+    echo "✓ Hermes installed from NousResearch/hermes-agent"
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@9 --activate
