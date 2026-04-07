@@ -13,8 +13,8 @@ serve({
 console.log(`API server running on port ${port}`);
 
 // Start CEO autonomous orchestrator (30s tick)
-// RE-ENABLED: Orchestrator index.ts was rewritten with safe syntax
-startCEOOrchestrator();
+// DISABLED TEMPORARILY: Fixing infinite recursion bug
+// startCEOOrchestrator();
 
 // Local task worker disabled — Hermes handles execution
 
