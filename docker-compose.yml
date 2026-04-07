@@ -43,7 +43,7 @@ services:
     container_name: mission-control-hermes-bridge
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://postgres:***@postgres:5432/missioncontrol
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/missioncontrol
       HERMES_INGEST_TOKEN: ${HERMES_INGEST_TOKEN:-test-token}
       AGENTIQ_API_URL: http://app:3000
       HERMES_BRIDGE_INTERVAL_SECONDS: ${HERMES_BRIDGE_INTERVAL_SECONDS:-10}
