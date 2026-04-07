@@ -1,17 +1,14 @@
 import { db } from "../db/client";
 import { sql } from "drizzle-orm";
 import { executionRuns, tasks, agents, projects, agentSkills, skills as skillsTable } from "../db/schema";
-import { recordExecutionEvent } from "../execution/dispatcher";
+import { recordExecutionEvent, recordExecutionResult } from "../execution/dispatcher";
+import { exec } from "child_process";
+import { promisify } from "util";
 
-const HERMES_BRIDGE_URL = process.env.HERMES_BRIDGE_URL || "";
-const HERMES_BRIDGE_TOKEN = process.env.HERMES_BRIDGE_TOKEN || "";
+const execAsync = promisify(exec);
+const AGENTIQ_API_URL = process.env.AGENTIQ_API_URL || "http://localhost:3000";
 
 async function main() {
-  if (!HERMES_BRIDGE_URL) {
-    console.error("HERMES_BRIDGE_URL is required");
-    process.exit(1);
-  }
-
   const queued = await db.select({ id: executionRuns.id, taskId: executionRuns.taskId, agentId: executionRuns.agentId })
     .from(executionRuns)
     .where(sql`${executionRuns.status} = 'queued'`)
@@ -47,64 +44,54 @@ async function main() {
         skills = rows;
       }
 
-      const payload = {
-        runId: run.id,
-        task: {
-          id: taskRow[0].id,
-          title: taskRow[0].title,
-          description: taskRow[0].description,
-          scratchpad: taskRow[0].scratchpad,
-          priority: taskRow[0].priority,
-        },
-        companyId: projRow[0].companyId,
-        agent: agentRow[0] ? { id: agentRow[0].id, name: agentRow[0].name, role: agentRow[0].role } : null,
-        skills,
-      };
+      // Build the task prompt for Hermes with AgentIQ skill context
+      const taskPrompt = `You are executing a task for AgentIQ Mission Control. Use the 'agentiq-executor' skill.
 
-      const res = await fetch(HERMES_BRIDGE_URL, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(HERMES_BRIDGE_TOKEN ? { "authorization": `Bearer ${HERMES_BRIDGE_TOKEN}` } : {}),
-        },
-        body: JSON.stringify(payload),
+TASK: ${taskRow[0].title}
+DESCRIPTION: ${taskRow[0].description || "No description provided"}
+${taskRow[0].scratchpad ? `CONTEXT/SCRATCHPAD: ${taskRow[0].scratchpad}` : ""}
+COMPANY: ${projRow[0].companyId}
+${agentRow[0] ? `AGENT: ${agentRow[0].name} (${agentRow[0].role})` : "UNASSIGNED"}
+CALLBACK_URL: ${AGENTIQ_API_URL}/api/executions/${run.id}
+
+${skills.length > 0 ? `RELEVANT SKILLS: ${skills.map(s => s.name).join(", ")}` : ""}
+
+Follow the agentiq-executor skill protocol:
+1. Acknowledge task start with a callback
+2. Execute the task using appropriate tools
+3. Report progress for long-running tasks
+4. Send final result to the callback URL
+
+Now execute the task "${taskRow[0].title}":`;
+
+      console.log(`[Hermes Bridge] Executing task ${run.id}: "${taskRow[0].title}"`);
+      
+      // Execute Hermes with the task and AgentIQ skill
+      const { stdout, stderr } = await execAsync(`echo "${taskPrompt.replace(/"/g, '\\"')}" | hermes chat --toolsets terminal,web,file --skills agentiq-executor --quiet`, {
+        timeout: 300000, // 5 minute timeout
+        maxBuffer: 10 * 1024 * 1024 // 10MB buffer
       });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        await db.update(executionRuns).set({ status: "failed", error: `HTTP ${res.status}: ${text.slice(0, 500)}`, finishedAt: new Date() }).where(sql`${executionRuns.id} = ${run.id}`);
-        await recordExecutionEvent({ runId: run.id, level: "error", message: `Hermes dispatch failed: ${res.status}`, meta: { body: text } });
-        
-        // Check retry count before resetting task to ready
-        const taskRow = await db.select({ retryCount: tasks.retryCount }).from(tasks).where(sql`${tasks.id} = ${run.taskId}`).limit(1);
-        const currentRetryCount = taskRow.length > 0 ? (taskRow[0].retryCount || 0) : 0;
-        const MAX_RETRIES = 3;
-        
-        if (currentRetryCount < MAX_RETRIES) {
-          // Increment retry count and set back to ready for retry
-          await db.update(tasks).set({ 
-            execStatus: "ready", 
-            status: "ready",
-            retryCount: currentRetryCount + 1
-          }).where(sql`${tasks.id} = ${run.taskId}`);
-          console.error(`Dispatch failed for ${run.id}: ${res.status}. Retry ${currentRetryCount + 1}/${MAX_RETRIES}`);
-        } else {
-          // Max retries exceeded, mark as permanently failed
-          await db.update(tasks).set({ 
-            execStatus: "failed", 
-            status: "blocked",
-            result: `Hermes dispatch failed after ${MAX_RETRIES} retries: HTTP ${res.status}`
-          }).where(sql`${tasks.id} = ${run.taskId}`);
-          console.error(`Dispatch failed for ${run.id}: ${res.status}. Max retries (${MAX_RETRIES}) exceeded. Task blocked.`);
-        }
-        continue;
-      }
+      const result = stdout + (stderr ? `\nSTDERR: ${stderr}` : "");
+      
+      // Record successful execution
+      await recordExecutionResult({
+        runId: run.id,
+        status: "completed",
+        result: result.substring(0, 4000) // Truncate if too long
+      });
+      
+      console.log(`[Hermes Bridge] Task ${run.id} completed successfully`);
 
-      await recordExecutionEvent({ runId: run.id, level: "info", message: "Dispatched to Hermes" });
-      console.log(`Dispatched run ${run.id}`);
     } catch (e: any) {
-      await db.update(executionRuns).set({ status: "failed", error: e.message, finishedAt: new Date() }).where(sql`${executionRuns.id} = ${run.id}`);
-      await recordExecutionEvent({ runId: run.id, level: "error", message: `Dispatch error: ${e.message}` });
+      console.error(`[Hermes Bridge] Error executing task ${run.id}:`, e.message);
+      
+      // Record failed execution
+      await recordExecutionResult({
+        runId: run.id,
+        status: "failed",
+        error: e.message.substring(0, 1000)
+      });
       
       // Check retry count before resetting task to ready
       const taskRow = await db.select({ retryCount: tasks.retryCount }).from(tasks).where(sql`${tasks.id} = ${run.taskId}`).limit(1);
@@ -118,15 +105,15 @@ async function main() {
           status: "ready",
           retryCount: currentRetryCount + 1
         }).where(sql`${tasks.id} = ${run.taskId}`);
-        console.error(`Error dispatching ${run.id}: ${e.message}. Retry ${currentRetryCount + 1}/${MAX_RETRIES}`);
+        console.error(`Error executing ${run.id}: ${e.message}. Retry ${currentRetryCount + 1}/${MAX_RETRIES}`);
       } else {
         // Max retries exceeded, mark as permanently failed
         await db.update(tasks).set({ 
           execStatus: "failed", 
           status: "blocked",
-          result: `Hermes dispatch error after ${MAX_RETRIES} retries: ${e.message}`
+          result: `Hermes execution failed after ${MAX_RETRIES} retries: ${e.message}`
         }).where(sql`${tasks.id} = ${run.taskId}`);
-        console.error(`Error dispatching ${run.id}: ${e.message}. Max retries (${MAX_RETRIES}) exceeded. Task blocked.`);
+        console.error(`Error executing ${run.id}: ${e.message}. Max retries (${MAX_RETRIES}) exceeded. Task blocked.`);
       }
     }
   }

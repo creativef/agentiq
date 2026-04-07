@@ -38,7 +38,7 @@ executionsRouter.post("/executions", authMiddleware, async (c) => {
 function verifyHermesToken(c: any): boolean {
   const required = process.env.HERMES_INGEST_TOKEN;
   if (!required) return true;
-  const auth = c.req.header("authorization") || "";
+  const auth = c.req.header("Authorization") || "";
   return auth === `Bearer ${required}`;
 }
 
