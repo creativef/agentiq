@@ -44,8 +44,8 @@ async function main() {
         skills = rows;
       }
 
-      // Build the task prompt for Hermes with AgentIQ skill context
-      const taskPrompt = `You are executing a task for AgentIQ Mission Control. Use the 'agentiq-executor' skill.
+      // Build the task prompt for Hermes
+      const taskPrompt = `You are executing a task for AgentIQ Mission Control.
 
 TASK: ${taskRow[0].title}
 DESCRIPTION: ${taskRow[0].description || "No description provided"}
@@ -56,18 +56,17 @@ CALLBACK_URL: ${AGENTIQ_API_URL}/api/executions/${run.id}
 
 ${skills.length > 0 ? `RELEVANT SKILLS: ${skills.map(s => s.name).join(", ")}` : ""}
 
-Follow the agentiq-executor skill protocol:
-1. Acknowledge task start with a callback
-2. Execute the task using appropriate tools
-3. Report progress for long-running tasks
-4. Send final result to the callback URL
+Instructions:
+1. Execute the task using appropriate tools (terminal, web, file)
+2. Report your progress and final result
+3. When done, note that the task is complete
 
 Now execute the task "${taskRow[0].title}":`;
 
       console.log(`[Hermes Bridge] Executing task ${run.id}: "${taskRow[0].title}"`);
       
-      // Execute Hermes with the task and AgentIQ skill
-      const { stdout, stderr } = await execAsync(`echo "${taskPrompt.replace(/"/g, '\\"')}" | hermes chat --toolsets terminal,web,file --skills agentiq-executor --quiet`, {
+      // Execute Hermes with the task (no specific skill required)
+      const { stdout, stderr } = await execAsync(`echo "${taskPrompt.replace(/"/g, '\\"')}" | hermes chat --toolsets terminal,web,file --quiet`, {
         timeout: 300000, // 5 minute timeout
         maxBuffer: 10 * 1024 * 1024 // 10MB buffer
       });
