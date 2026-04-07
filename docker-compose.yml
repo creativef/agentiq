@@ -48,6 +48,7 @@ services:
       HERMES_BRIDGE_URL: ${HERMES_BRIDGE_URL}
       HERMES_BRIDGE_TOKEN: ${HERMES_BRIDGE_TOKEN}
       HERMES_BRIDGE_INTERVAL_SECONDS: ${HERMES_BRIDGE_INTERVAL_SECONDS:-10}
+    entrypoint: []
     volumes:
       - .:/app
     depends_on:
