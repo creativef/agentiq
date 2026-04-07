@@ -3,11 +3,15 @@
 
 FROM node:20-alpine
 
-# Install Python and pip for Hermes CLI
-RUN apk add --no-cache python3 py3-pip
+# Install Python, pip, and venv for Hermes CLI
+RUN apk add --no-cache python3 py3-pip python3-venv
 
-# Install Hermes CLI
-RUN pip3 install hermes-agent
+# Create and activate virtual environment for Hermes
+RUN python3 -m venv /opt/hermes-venv && \
+    /opt/hermes-venv/bin/pip install hermes-agent
+
+# Add Hermes to PATH
+ENV PATH="/opt/hermes-venv/bin:$PATH"
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@9 --activate
@@ -27,7 +31,7 @@ COPY . .
 # Verify installations
 RUN echo "Node: $(node --version)" && \
     echo "Python: $(python3 --version)" && \
-    echo "Hermes: $(hermes --version 2>/dev/null || echo 'Hermes installed')"
+    echo "Hermes: $(hermes --version 2>/dev/null || echo 'Hermes CLI installed')"
 
 # The bridge will be started by docker-compose command
 CMD ["sh", "-c", "echo 'Hermes Bridge container ready' && tail -f /dev/null"]
