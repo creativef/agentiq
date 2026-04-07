@@ -29,7 +29,7 @@ services:
       - "3000:3000"
       - "5173:5173"
     environment:
-      DATABASE_URL: postgresql://postgres:***@postgres:5432/missioncontrol
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/missioncontrol
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       NODE_OPTIONS: "--max-old-space-size=4096"
     volumes:
