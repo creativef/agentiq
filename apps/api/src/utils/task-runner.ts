@@ -66,7 +66,9 @@ export async function runTaskExecution(ctx: ExecutionContext): Promise<{ success
   const fullText = `${lowerTitle} ${lowerDesc}`;
 
   // 1. HIRING
-  if (fullText.includes("hire") || fullText.includes("found") || fullText.includes("recruit") || fullText.includes("onboard")) {
+  // Use regex with word boundaries to avoid matching "onboarding" (contains "onboard")
+  const hiringRegex = /\b(hire|found|recruit|onboard)\b/i;
+  if (hiringRegex.test(fullText)) {
     const rolesToHire = extractRoles(fullText);
     if (rolesToHire.length === 0) {
       if (fullText.includes("cto") || fullText.includes("chief technology")) rolesToHire.push("CTO");
@@ -138,7 +140,8 @@ export async function runTaskExecution(ctx: ExecutionContext): Promise<{ success
   }
 
   // 2. GOALS
-  if (fullText.includes("goal") || fullText.includes("strategy") || fullText.includes("kpi") || fullText.includes("metric")) {
+  const goalsRegex = /\b(goal|strategy|kpi|metric)\b/i;
+  if (goalsRegex.test(fullText)) {
     const keywords = ["revenue", "growth", "users", "traffic", "conversion", "launch", "profit"];
     const matches = keywords.filter(kw => fullText.includes(kw));
     for (const key of matches) {
@@ -153,7 +156,8 @@ export async function runTaskExecution(ctx: ExecutionContext): Promise<{ success
   }
 
   // 3. DELEGATION
-  if (fullText.includes("team") || fullText.includes("manage") || fullText.includes("coordinate")) {
+  const delegationRegex = /\b(team|manage|coordinate)\b/i;
+  if (delegationRegex.test(fullText)) {
     const mentioned = extractRoles(fullText);
     if (mentioned.length > 0) {
       for (const role of mentioned) {

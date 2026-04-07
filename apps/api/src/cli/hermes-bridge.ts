@@ -24,7 +24,7 @@ async function main() {
 
   for (const run of queued) {
     try {
-      await db.update(executionRuns).set({ status: "running", startedAt: new Date() })
+      await db.update(executionRuns).set({ status: "dispatching", startedAt: new Date() })
         .where(sql`${executionRuns.id} = ${run.id}`);
 
       const taskRow = await db.select().from(tasks).where(sql`${tasks.id} = ${run.taskId}`).limit(1);
@@ -72,18 +72,62 @@ async function main() {
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        await db.update(executionRuns).set({ status: "queued", startedAt: null }).where(sql`${executionRuns.id} = ${run.id}`);
+        await db.update(executionRuns).set({ status: "failed", error: `HTTP ${res.status}: ${text.slice(0, 500)}`, finishedAt: new Date() }).where(sql`${executionRuns.id} = ${run.id}`);
         await recordExecutionEvent({ runId: run.id, level: "error", message: `Hermes dispatch failed: ${res.status}`, meta: { body: text } });
-        console.error(`Dispatch failed for ${run.id}: ${res.status}`);
+        
+        // Check retry count before resetting task to ready
+        const taskRow = await db.select({ retryCount: tasks.retryCount }).from(tasks).where(sql`${tasks.id} = ${run.taskId}`).limit(1);
+        const currentRetryCount = taskRow.length > 0 ? (taskRow[0].retryCount || 0) : 0;
+        const MAX_RETRIES = 3;
+        
+        if (currentRetryCount < MAX_RETRIES) {
+          // Increment retry count and set back to ready for retry
+          await db.update(tasks).set({ 
+            execStatus: "ready", 
+            status: "ready",
+            retryCount: currentRetryCount + 1
+          }).where(sql`${tasks.id} = ${run.taskId}`);
+          console.error(`Dispatch failed for ${run.id}: ${res.status}. Retry ${currentRetryCount + 1}/${MAX_RETRIES}`);
+        } else {
+          // Max retries exceeded, mark as permanently failed
+          await db.update(tasks).set({ 
+            execStatus: "failed", 
+            status: "blocked",
+            result: `Hermes dispatch failed after ${MAX_RETRIES} retries: HTTP ${res.status}`
+          }).where(sql`${tasks.id} = ${run.taskId}`);
+          console.error(`Dispatch failed for ${run.id}: ${res.status}. Max retries (${MAX_RETRIES}) exceeded. Task blocked.`);
+        }
         continue;
       }
 
       await recordExecutionEvent({ runId: run.id, level: "info", message: "Dispatched to Hermes" });
       console.log(`Dispatched run ${run.id}`);
     } catch (e: any) {
-      await db.update(executionRuns).set({ status: "queued", startedAt: null }).where(sql`${executionRuns.id} = ${run.id}`);
+      await db.update(executionRuns).set({ status: "failed", error: e.message, finishedAt: new Date() }).where(sql`${executionRuns.id} = ${run.id}`);
       await recordExecutionEvent({ runId: run.id, level: "error", message: `Dispatch error: ${e.message}` });
-      console.error(`Error dispatching ${run.id}:`, e.message);
+      
+      // Check retry count before resetting task to ready
+      const taskRow = await db.select({ retryCount: tasks.retryCount }).from(tasks).where(sql`${tasks.id} = ${run.taskId}`).limit(1);
+      const currentRetryCount = taskRow.length > 0 ? (taskRow[0].retryCount || 0) : 0;
+      const MAX_RETRIES = 3;
+      
+      if (currentRetryCount < MAX_RETRIES) {
+        // Increment retry count and set back to ready for retry
+        await db.update(tasks).set({ 
+          execStatus: "ready", 
+          status: "ready",
+          retryCount: currentRetryCount + 1
+        }).where(sql`${tasks.id} = ${run.taskId}`);
+        console.error(`Error dispatching ${run.id}: ${e.message}. Retry ${currentRetryCount + 1}/${MAX_RETRIES}`);
+      } else {
+        // Max retries exceeded, mark as permanently failed
+        await db.update(tasks).set({ 
+          execStatus: "failed", 
+          status: "blocked",
+          result: `Hermes dispatch error after ${MAX_RETRIES} retries: ${e.message}`
+        }).where(sql`${tasks.id} = ${run.taskId}`);
+        console.error(`Error dispatching ${run.id}: ${e.message}. Max retries (${MAX_RETRIES}) exceeded. Task blocked.`);
+      }
     }
   }
 
