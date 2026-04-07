@@ -3,8 +3,8 @@
 
 FROM node:20-alpine
 
-# Install Python, pip, and venv for Hermes CLI
-RUN apk add --no-cache python3 py3-pip python3-venv
+# Install Python and pip for Hermes CLI (venv is included in python3 package)
+RUN apk add --no-cache python3 py3-pip
 
 # Create and activate virtual environment for Hermes
 RUN python3 -m venv /opt/hermes-venv && \
