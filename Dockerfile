@@ -15,4 +15,4 @@ COPY . .
 
 EXPOSE 3000 5173
 
-CMD ["sh", "-c", "CI=true pnpm install && pnpm -C apps/api exec tsx src/db/migrate.ts && (pnpm -C apps/api exec tsx src/server.ts & pnpm -C apps/web dev --host 0.0.0.0)"]
+CMD ["sh", "-c", "pnpm -C apps/api exec tsx src/db/migrate.ts && echo 'Starting API server...' && pnpm -C apps/api exec tsx src/server.ts & echo 'Starting Vite dev server...' && pnpm -C apps/web dev --host 0.0.0.0 --port 5173"]
