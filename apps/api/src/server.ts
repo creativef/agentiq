@@ -12,9 +12,9 @@ serve({
 
 console.log(`API server running on port ${port}`);
 
-// Start CEO autonomous orchestrator (30s tick)
-// Orchestrator decides task assignments -> enqueue to Hermes for execution
-startCEOOrchestrator();
+// CEO orchestrator DISABLED - Hermes is the brain
+// startCEOOrchestrator();
+console.log("CEO orchestrator disabled - Hermes handles all orchestration");
 
 // Local task worker disabled — Hermes handles execution
 

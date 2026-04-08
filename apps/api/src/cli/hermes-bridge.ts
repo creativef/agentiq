@@ -1,6 +1,6 @@
 import { db } from "../db/client";
 import { sql } from "drizzle-orm";
-import { executionRuns, tasks, agents, projects, agentSkills, skills as skillsTable } from "../db/schema";
+import { executionRuns, tasks, agents, projects, companies, agentSkills, skills as skillsTable } from "../db/schema";
 import { recordExecutionEvent, recordExecutionResult } from "../execution/dispatcher";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -18,36 +18,55 @@ function buildTaskPrompt(
   task: { title: string; description: string | null; scratchpad: string | null },
   agentName: string | null,
   agentRole: string | null,
-  skillNames: string[],
+  companyName: string | null,
+  companyGoal: string | null,
+  projectName: string | null,
   callbackUrl: string,
 ): string {
   const lines: string[] = [
-    "You are an execution agent working for AgentIQ Mission Control.",
-    "Execute the following task using your available tools (terminal, web, file, etc.).",
+    "You are Hermes, the autonomous AI brain of AgentIQ Mission Control.",
     "",
-    `TASK: ${task.title}`,
-    `DESCRIPTION: ${task.description || "Use your best judgment."}`,
   ];
+
+  // Company/Project Context
+  if (companyName) {
+    lines.push(`COMPANY CONTEXT: You are working for ${companyName}`);
+    if (companyGoal) {
+      lines.push(`COMPANY GOAL: ${companyGoal}`);
+    }
+  }
+  
+  if (projectName) {
+    lines.push(`PROJECT: ${projectName}`);
+  }
+
+  lines.push(`TASK: ${task.title}`);
+  lines.push(`DESCRIPTION: ${task.description || "Use your best judgment."}`);
+  lines.push(`CALLBACK_URL: ${callbackUrl} (Use this to report progress and final results)`);
 
   if (task.scratchpad) {
     lines.push(`CONTEXT/SCRATCHPAD: ${task.scratchpad}`);
   }
 
-  if (agentName) {
-    lines.push(`YOUR ROLE: ${agentName} (${agentRole || "Agent"})`);
-  }
-
-  if (skillNames.length > 0) {
-    lines.push(`RELEVANT SKILLS: ${skillNames.join(", ")}`);
+  if (agentName && agentRole) {
+    lines.push(`SPECIFIC AGENT ASSIGNMENT: You are acting as ${agentName}, the ${agentRole}`);
+    lines.push(`ROLE CONTEXT: As ${agentRole}, use appropriate skills and approaches for this role.`);
+  } else if (agentRole) {
+    lines.push(`SPECIFIC AGENT ASSIGNMENT: You are acting as ${agentRole}`);
+    lines.push(`ROLE CONTEXT: As ${agentRole}, use appropriate skills and approaches for this role.`);
+  } else {
+    // No specific agent assigned - Hermes acts as CEO/brain for this company
+    lines.push(`CEO/BRAIN MODE: You are the CEO/brain of ${companyName || "the company"}.`);
+    lines.push(`DECISION MAKING: Decide which agents/roles are needed for this task.`);
+    lines.push(`EXECUTION: You can execute directly or delegate to subagents as needed.`);
+    lines.push(`CONTEXT AWARENESS: Remember you are working for ${companyName || "this company"} on ${projectName || "this project"}.`);
   }
 
   lines.push("");
-  lines.push("Instructions:");
-  lines.push("1. Execute the task thoroughly using appropriate tools.");
-  lines.push("2. Show your work -- use tool calls so activity is visible.");
-  lines.push(`3. When finished, end your response with a clear summary of what was done and any outputs created.`);
-  lines.push("");
-  lines.push(`Now execute the task "${task.title}":`);
+  lines.push("Execute this task using your available tools and skills.");
+  lines.push("You can delegate to subagents if multiple roles are needed.");
+  lines.push("Show your work with tool calls. Report progress to CALLBACK_URL for long tasks.");
+  lines.push("When finished, provide a clear summary of what was accomplished.");
 
   return lines.join("\n");
 }
@@ -105,18 +124,38 @@ async function main() {
       if (taskRow.length === 0) throw new Error("Task not found");
       const task = taskRow[0];
 
-      // ---- fetch project / company ----
-      let companyId: string | null = null;
+      // ---- fetch project / company details ----
+      let companyName: string | null = null;
+      let companyGoal: string | null = null;
+      let projectName: string | null = null;
+      
       if (task.projectId) {
+        // Get project and company details
         const projRow = await db
-          .select({ companyId: projects.companyId })
+          .select({ 
+            projectName: projects.name,
+            companyId: projects.companyId 
+          })
           .from(projects)
           .where(sql`${projects.id} = ${task.projectId}`)
           .limit(1);
-        companyId = projRow[0]?.companyId || null;
-      }
-      if (!companyId) {
-        companyId = run.id; // fallback -- shouldn't happen in normal flow
+          
+        if (projRow.length > 0) {
+          projectName = projRow[0].projectName;
+          const companyId = projRow[0].companyId;
+          
+          // Get company details
+          const companyRow = await db
+            .select({ name: companies.name, goal: companies.goal })
+            .from(companies)
+            .where(sql`${companies.id} = ${companyId}`)
+            .limit(1);
+            
+          if (companyRow.length > 0) {
+            companyName = companyRow[0].name;
+            companyGoal = companyRow[0].goal;
+          }
+        }
       }
 
       // ---- fetch agent info & skills ----
@@ -145,10 +184,18 @@ async function main() {
 
       // ---- build prompt & dispatch ----
       const callbackUrl = `${AGENTIQ_API_URL}/api/executions/${run.id}`;
-      const prompt = buildTaskPrompt(task, agentName, agentRole, skillNames, callbackUrl);
+      const prompt = buildTaskPrompt(
+        task, 
+        agentName, 
+        agentRole, 
+        companyName,
+        companyGoal,
+        projectName,
+        callbackUrl
+      );
       const promptFile = writePromptFile(prompt, run.taskId);
 
-      const cliCommand = `cat ${escapeShellArg(promptFile)} | hermes chat -Q -q "$(cat ${escapeShellArg(promptFile)})" --source tool --max-turns 60`;
+      const cliCommand = `hermes chat -Q -q "$(cat ${escapeShellArg(promptFile)})" --source tool --max-turns 60`;
 
       console.log(`[Hermes Bridge] Dispatching run ${run.id}: "${task.title}"`);
       console.log(`[Hermes Bridge] Prompt file: ${promptFile}`);
