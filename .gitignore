@@ -6,3 +6,6 @@ dist/
 *.local
 .env*
 !.env.example
+.DS_Store
+.pnpm-store/
+**/.DS_Store
