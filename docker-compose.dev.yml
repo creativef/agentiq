@@ -26,7 +26,7 @@ services:
     container_name: mission-control-api
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"  # Map host port 3001 to container port 3000
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/missioncontrol
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
@@ -49,7 +49,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: http://localhost:3000
+      VITE_API_URL: http://localhost:3001  # Changed to port 3001
     volumes:
       - .:/app
       - /app/node_modules
