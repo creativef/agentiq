@@ -6,13 +6,12 @@ WORKDIR /app
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
-COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
 
 RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-EXPOSE 3000 5173
+EXPOSE 3000
 
-CMD ["sh", "-c", "pnpm -C apps/api exec tsx src/db/migrate.ts && echo 'Starting API server...' && pnpm -C apps/api exec tsx src/server.ts & echo 'Starting Vite dev server...' && cd apps/web && pnpm dev --host 0.0.0.0 --port 5173"]
+WORKDIR /app/apps/api
