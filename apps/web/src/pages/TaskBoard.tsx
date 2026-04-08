@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, FormEvent } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useExecutionWebSocket } from "../hooks/useExecutionWebSocket";
 
 interface Task {
   id: string;
@@ -48,10 +49,28 @@ export default function TaskBoard() {
     title: "", 
     description: "", 
     priority: "medium", 
-    agentId: "",
-    scheduledAt: "",
-    requiresApproval: false,
-    approverRole: "FOUNDER",
+    agentId: "", 
+    scheduledAt: "", 
+    requiresApproval: false, 
+    approverRole: "FOUNDER" 
+  });
+
+  // WebSocket for real-time execution updates
+  const { isConnected, lastMessage } = useExecutionWebSocket({
+    companyId: company?.id,
+    onEvent: (event) => {
+      console.log('[TaskBoard] Execution event:', event);
+      // Update task status based on execution events
+      if (event.event?.runId) {
+        // We could fetch updated task here or update optimistically
+        fetchTasks(); // Refresh tasks to get latest status
+      }
+    },
+    onResult: (result) => {
+      console.log('[TaskBoard] Execution result:', result);
+      // Task completed or failed - refresh to show result
+      fetchTasks();
+    },
   });
 
   // Load agents for assignment dropdown
@@ -157,7 +176,21 @@ export default function TaskBoard() {
   return (
     <div style={{ padding: "1.5rem", height: "calc(100vh - 80px)", overflow: "auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <h1 style={{ fontSize: "1.5rem", fontWeight: "bold" }}>Task Board</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <h1 style={{ fontSize: "1.5rem", fontWeight: "bold" }}>Task Board</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <div style={{
+              width: "10px",
+              height: "10px",
+              borderRadius: "50%",
+              background: isConnected ? "#22c55e" : "#ef4444",
+              animation: isConnected ? "pulse 2s infinite" : "none"
+            }} />
+            <span style={{ fontSize: "0.875rem", color: "#9ca3af" }}>
+              {isConnected ? "Hermes Bridge Connected" : "Hermes Bridge Disconnected"}
+            </span>
+          </div>
+        </div>
         <button onClick={() => setShowForm(!showForm)} style={{ padding: "8px 16px", background: "#3b82f6", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>+ Add Task</button>
       </div>
 
@@ -252,6 +285,13 @@ export default function TaskBoard() {
           );
         })}
       </div>
+      <style>{`
+        @keyframes pulse {
+          0% { opacity: 1; }
+          50% { opacity: 0.5; }
+          100% { opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }

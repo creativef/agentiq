@@ -33,18 +33,41 @@ export async function enqueueExecution(params: {
   return run[0];
 }
 
+let wsServer: any = null;
+
+export function setWebSocketServer(server: any) {
+  wsServer = server;
+}
+
 export async function recordExecutionEvent(params: {
   runId: string;
   level?: string;
   message: string;
   meta?: any;
 }) {
+  const event = {
+    runId: params.runId,
+    level: params.level || "info",
+    message: params.message,
+    meta: params.meta,
+    timestamp: new Date().toISOString(),
+  };
+
   await db.insert(executionEvents).values({
     runId: params.runId,
     level: params.level || "info",
     message: params.message,
     meta: params.meta ? JSON.stringify(params.meta) : null,
   });
+
+  // Broadcast via WebSocket if available
+  if (wsServer) {
+    try {
+      await wsServer.broadcastExecutionEvent(params.runId, event);
+    } catch (err) {
+      console.error("[Dispatcher] Error broadcasting execution event:", err);
+    }
+  }
 }
 
 export async function recordExecutionResult(params: {
@@ -81,5 +104,19 @@ export async function recordExecutionResult(params: {
         ? "✅ Hermes completed task"
         : `⚠️ Hermes failed task: ${params.error || "Unknown error"}`,
     }).catch(() => {});
+  }
+
+  // Broadcast result via WebSocket if available
+  if (wsServer) {
+    try {
+      wsServer.broadcastExecutionResult(params.runId, {
+        status: params.status,
+        result: params.result,
+        error: params.error,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("[Dispatcher] Error broadcasting execution result:", err);
+    }
   }
 }
