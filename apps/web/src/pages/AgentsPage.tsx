@@ -41,14 +41,15 @@ export default function AgentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<AgentItem | null>(null);
   // Form: add altReportsTo array for Founders
-  const [form, setForm] = useState({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [] as string[], reportsTo: "", altReportsTo: [] as string[] });
+  const [form, setForm] = useState({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", reportsTo: "", altReportsTo: [] as string[] });
   const [editForm, setEditForm] = useState({ name: "", status: "", budgetLimit: "", heartbeatInterval: "", reportsTo: "", altReportsTo: [] as string[] });
-  const [agentSkills, setAgentSkills] = useState<Skill[]>([]);
-  const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
-  const [showSkillPicker, setShowSkillPicker] = useState(false);
   const [showActivityLogAgent, setShowActivityLogAgent] = useState<string>("");
-  const [showCreateSkill, setShowCreateSkill] = useState(false);
-  const [newSkill, setNewSkill] = useState({ name: "", category: "development", instructions: "", description: "" });
+  // DEPRECATED: Hermes manages skills, not AgentIQ
+  // const [agentSkills, setAgentSkills] = useState<Skill[]>([]);
+  // const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
+  // const [showSkillPicker, setShowSkillPicker] = useState(false);
+  // const [showCreateSkill, setShowCreateSkill] = useState(false);
+  // const [newSkill, setNewSkill] = useState({ name: "", category: "development", instructions: "", description: "" });
 
   // Load agents
   const fetchAgents = () => {
@@ -71,13 +72,8 @@ export default function AgentsPage() {
     [agents]
   );
 
-  // Load skills library
-  useEffect(() => {
-    fetch("/api/skills", { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setAvailableSkills(d?.skills || []))
-      .catch(console.error);
-  }, []);
+  // DEPRECATED: Hermes manages skills, not AgentIQ
+  // Skills loading removed
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
@@ -88,7 +84,8 @@ export default function AgentsPage() {
       role: form.role,
       budgetLimit: form.budgetLimit ? Number(form.budgetLimit) : null,
       heartbeatInterval: Number(form.heartbeatInterval),
-      skillIds: form.skillIds,
+      // DEPRECATED: Hermes manages skills, not AgentIQ
+      // skillIds: form.skillIds,
       reportsTo: form.reportsTo || null,
     };
 
@@ -104,7 +101,7 @@ export default function AgentsPage() {
       body: JSON.stringify(body),
     });
     if (res.ok) {
-      setForm({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", skillIds: [], reportsTo: "", altReportsTo: [] });
+      setForm({ name: "", role: "AGENT", budgetLimit: "", heartbeatInterval: "3600", reportsTo: "", altReportsTo: [] });
       fetchAgents();
       setShowForm(false);
     }
@@ -120,12 +117,13 @@ export default function AgentsPage() {
       reportsTo: agent.reportsTo || "",
       altReportsTo: agent.altReportsTo || [],
     });
-    fetch(`/api/agents/${agent.id}/skills`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setAgentSkills(d?.skills || []))
-      .catch(() => setAgentSkills([]));
-    setShowSkillPicker(false);
-    setShowCreateSkill(false);
+    // DEPRECATED: Hermes manages skills, not AgentIQ
+    // fetch(`/api/agents/${agent.id}/skills`, { credentials: "include" })
+    //   .then(r => r.ok ? r.json() : null)
+    //   .then(d => setAgentSkills(d?.skills || []))
+    //   .catch(() => setAgentSkills([]));
+    // setShowSkillPicker(false);
+    // setShowCreateSkill(false);
   };
 
   const handleSaveEdit = async () => {
@@ -137,61 +135,66 @@ export default function AgentsPage() {
       altReportsTo = founderIds;
     }
 
+    const body = {
+      name: form.name,
+      role: form.role,
+      budgetLimit: form.budgetLimit ? parseFloat(form.budgetLimit) : null,
+      heartbeatInterval: parseInt(form.heartbeatInterval),
+      reportsTo: form.reportsTo || null,
+      altReportsTo: form.altReportsTo,
+      // DEPRECATED: Hermes manages skills, not AgentIQ
+      // skillIds: form.skillIds,
+    };
+    
     await fetch(`/api/agents/${editing.id}`, {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: editForm.name,
-        status: editForm.status || undefined,
-        budgetLimit: editForm.budgetLimit ? Number(editForm.budgetLimit) : null,
-        heartbeatInterval: Number(editForm.heartbeatInterval),
-        reportsTo: editForm.reportsTo || null,
-        altReportsTo,
-      }),
+      body: JSON.stringify(body),
     });
     setEditing(null);
     fetchAgents();
   };
 
-  const assignSkill = async (skillId: string) => {
-    if (!editing) return;
-    await fetch(`/api/agents/${editing.id}/skills`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ skillId }),
-    });
-    fetch(`/api/agents/${editing.id}/skills`, { credentials: "include" })
-      .then(r => r.ok ? r.json() : { skills: [] })
-      .then(d => setAgentSkills(d.skills || []));
-  };
-
-  const removeSkill = async (agentSkillId: string) => {
-    if (!editing) return;
-    await fetch(`/api/agents/${editing.id}/skills/${agentSkillId}`, {
-      method: "DELETE",
-      credentials: "include",
-    });
-    setAgentSkills(agentSkills.filter(s => s.id !== agentSkillId));
-  };
-
-  const handleCreateSkill = async (e: FormEvent) => {
-    e.preventDefault();
-    const res = await fetch("/api/skills", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newSkill),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setAvailableSkills(prev => [...prev, data.skill]);
-      setForm(prev => ({ ...prev, skillIds: [...prev.skillIds, data.skill.id] }));
-      setNewSkill({ name: "", category: "development", instructions: "", description: "" });
-      setShowCreateSkill(false);
-    }
-  };
+  // DEPRECATED: Hermes manages skills, not AgentIQ
+  // const assignSkill = async (skillId: string) => {
+  //   if (!editing) return;
+  //   await fetch(`/api/agents/${editing.id}/skills`, {
+  //     method: "POST",
+  //     credentials: "include",
+  //     headers: { "Content-Type": "application/json" },
+  //     body: JSON.stringify({ skillId }),
+  //   });
+  //   fetch(`/api/agents/${editing.id}/skills`, { credentials: "include" })
+  //     .then(r => r.ok ? r.json() : { skills: [] })
+  //     .then(d => setAgentSkills(d.skills || []));
+  // };
+  // 
+  // const removeSkill = async (agentSkillId: string) => {
+  //   if (!editing) return;
+  //   await fetch(`/api/agents/${editing.id}/skills/${agentSkillId}`, {
+  //     method: "DELETE",
+  //     credentials: "include",
+  //   });
+  //   setAgentSkills(agentSkills.filter(s => s.id !== agentSkillId));
+  // };
+  // 
+  // const handleCreateSkill = async (e: FormEvent) => {
+  //   e.preventDefault();
+  //   const res = await fetch("/api/skills", {
+  //     method: "POST",
+  //     credentials: "include",
+  //     headers: { "Content-Type": "application/json" },
+  //     body: JSON.stringify(newSkill),
+  //   });
+  //   if (res.ok) {
+  //     const data = await res.json();
+  //     setAvailableSkills(prev => [...prev, data.skill]);
+  //     setForm(prev => ({ ...prev, skillIds: [...prev.skillIds, data.skill.id] }));
+  //     setNewSkill({ name: "", category: "development", instructions: "", description: "" });
+  //     setShowCreateSkill(false);
+  //   }
+  // };
 
   const handleStatus = async (agentId: string, newStatus: string) => {
     await fetch(`/api/agents/${agentId}`, {
@@ -319,7 +322,7 @@ export default function AgentsPage() {
             </select>
           </div>
 
-          {/* Skills section */}
+          {/* DEPRECATED: Hermes manages skills, not AgentIQ
           <div style={{ marginTop: "0.75rem", padding: "0.75rem", background: "#111827", borderRadius: "6px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
               <span style={{ fontSize: "0.85rem", fontWeight: "bold", color: "#e5e7eb" }}>Skills</span>
@@ -349,7 +352,6 @@ export default function AgentsPage() {
               </div>
             )}
 
-            {/* Selected skills */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "0.5rem" }}>
               {form.skillIds.map(id => {
                 const s = availableSkills.find(sk => sk.id === id);
@@ -362,13 +364,13 @@ export default function AgentsPage() {
               })}
             </div>
 
-            {/* Available skills */}
             <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
               {availableSkills.filter(s => !form.skillIds.includes(s.id)).map(s => (
                 <button key={s.id} type="button" onClick={() => setForm({...form, skillIds: [...form.skillIds, s.id]})} style={{ padding: "2px 8px", background: "#374151", border: "1px solid #4B5563", borderRadius: "12px", color: "#9ca3af", fontSize: "0.7rem", cursor: "pointer" }}>{s.icon} {s.name}</button>
               ))}
             </div>
           </div>
+          */}
 
           <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
             <button type="submit" style={{ padding: "6px 16px", background: "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: "pointer" }}>Create</button>
@@ -443,7 +445,7 @@ export default function AgentsPage() {
                         </div>
                       </div>
                     )}
-                    {/* Skills in edit mode */}
+                    {/* DEPRECATED: Hermes manages skills, not AgentIQ
                     <div style={{ marginTop: "0.5rem" }}>
                       <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: "4px" }}>Skills</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "4px" }}>
@@ -468,6 +470,7 @@ export default function AgentsPage() {
                         </div>
                       )}
                     </div>
+                    */}
                   </div>
                   <div style={{ display: "flex", gap: "0.5rem" }}>
                     <button onClick={handleSaveEdit} style={{ padding: "4px 10px", background: "#22c55e", border: "none", color: "white", borderRadius: "4px", cursor: "pointer", fontSize: "0.75rem" }}>Save</button>

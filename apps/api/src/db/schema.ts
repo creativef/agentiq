@@ -127,25 +127,26 @@ export const calendarEvents = pgTable("calendar_events", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// DEPRECATED: Hermes manages skills, not AgentIQ
 // Skill definitions — instruction sets that give agents capabilities
-export const skills = pgTable("skills", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  category: text("category").notNull(),
-  description: text("description"),
-  instructions: text("instructions").notNull(),
-  icon: text("icon"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-// Which skills each agent has
-export const agentSkills = pgTable("agent_skills", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  agentId: uuid("agent_id").notNull(),
-  skillId: uuid("skill_id").notNull(),
-  customInstructions: text("custom_instructions"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+// export const skills = pgTable("skills", {
+//   id: uuid("id").primaryKey().defaultRandom(),
+//   name: text("name").notNull(),
+//   category: text("category").notNull(),
+//   description: text("description"),
+//   instructions: text("instructions").notNull(),
+//   icon: text("icon"),
+//   createdAt: timestamp("created_at").defaultNow(),
+// });
+// 
+// // Which skills each agent has
+// export const agentSkills = pgTable("agent_skills", {
+//   id: uuid("id").primaryKey().defaultRandom(),
+//   agentId: uuid("agent_id").notNull(),
+//   skillId: uuid("skill_id").notNull(),
+//   customInstructions: text("custom_instructions"),
+//   createdAt: timestamp("created_at").defaultNow(),
+// });
 
 export const agentLogs = pgTable("agent_logs", {
   id: uuid("id").primaryKey().defaultRandom(),

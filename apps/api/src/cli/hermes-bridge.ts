@@ -1,6 +1,6 @@
 import { db } from "../db/client";
 import { sql } from "drizzle-orm";
-import { executionRuns, tasks, agents, projects, companies, agentSkills, skills as skillsTable } from "../db/schema";
+import { executionRuns, tasks, agents, projects, companies } from "../db/schema";
 import { recordExecutionEvent, recordExecutionResult } from "../execution/dispatcher";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -158,10 +158,9 @@ async function main() {
         }
       }
 
-      // ---- fetch agent info & skills ----
+      // ---- fetch agent info ----
       let agentName: string | null = null;
       let agentRole: string | null = null;
-      let skillNames: string[] = [];
 
       if (run.agentId) {
         const agentRow = await db
@@ -174,12 +173,13 @@ async function main() {
           agentRole = agentRow[0].role;
         }
 
-        const skillRows = await db
-          .select({ name: skillsTable.name })
-          .from(agentSkills)
-          .innerJoin(skillsTable, sql`${agentSkills.skillId} = ${skillsTable.id}`)
-          .where(sql`${agentSkills.agentId} = ${run.agentId}`);
-        skillNames = skillRows.map((s) => s.name);
+        // DEPRECATED: Hermes manages skills, not AgentIQ
+        // const skillRows = await db
+        //   .select({ name: skillsTable.name })
+        //   .from(agentSkills)
+        //   .innerJoin(skillsTable, sql`${agentSkills.skillId} = ${skillsTable.id}`)
+        //   .where(sql`${agentSkills.agentId} = ${run.agentId}`);
+        // skillNames = skillRows.map((s) => s.name);
       }
 
       // ---- build prompt & dispatch ----

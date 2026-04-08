@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { companies, companyMembers, agents, tasks, projects, events, agentSkills, agentLogs } from "../db/schema";
+import { companies, companyMembers, agents, tasks, projects, events, agentLogs } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 
 const agentsRouter = new Hono();
@@ -9,7 +9,7 @@ agentsRouter.use(authMiddleware);
 
 // GET /agents - list all agents for current user's companies
 agentsRouter.get("/agents", async (c) => {
-  const user: UserPayload = c.get("user");
+  const user = c.get("user") as UserPayload;
   const result = await db
     .select({
       id: agents.id,
@@ -36,7 +36,7 @@ agentsRouter.get("/agents", async (c) => {
 agentsRouter.get("/companies/:companyId/agents", async (c) => {
   const companyId = c.req.param("companyId");
   const projectId = c.req.query("projectId") || null;
-  const user: UserPayload = c.get("user");
+  const user = c.get("user") as UserPayload;
   const access = await db.select()
     .from(companyMembers)
     .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
@@ -74,7 +74,7 @@ agentsRouter.get("/companies/:companyId/agents", async (c) => {
 // POST /companies/:companyId/agents - create agent
 agentsRouter.post("/companies/:companyId/agents", async (c) => {
   const companyId = c.req.param("companyId");
-  const user: UserPayload = c.get("user");
+  const user = c.get("user") as UserPayload;
   const access = await db.select()
     .from(companyMembers)
     .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
@@ -98,19 +98,8 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
     altReportsTo: body.altReportsTo || null,
   }).returning();
 
-  // Assign skills if provided
-  if (body.skillIds && Array.isArray(body.skillIds) && body.skillIds.length > 0) {
-    for (const skillId of body.skillIds) {
-      try {
-        await db.insert(agentSkills).values({
-          agentId: result[0].id,
-          skillId,
-        });
-      } catch {
-        // Skip invalid skill IDs
-      }
-    }
-  }
+  // DEPRECATED: Hermes manages skills, not AgentIQ
+  // Skills assignment removed - Hermes manages skills
 
   return c.json({ agent: result[0] });
 });
@@ -118,7 +107,7 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
 // GET /agents/:agentId/status — data-only status
 agentsRouter.get("/agents/:agentId/status", async (c) => {
   const agentId = c.req.param("agentId");
-  const user: UserPayload = c.get("user");
+  const user = c.get("user") as UserPayload;
 
   const agentCheck = await db.select({ id: agents.id, companyId: agents.companyId, name: agents.name, role: agents.role, lastHeartbeat: agents.lastHeartbeat })
     .from(agents)
@@ -171,7 +160,7 @@ agentsRouter.get("/agents/:agentId/status", async (c) => {
 // PUT /agents/:agentId
 agentsRouter.put("/agents/:agentId", async (c) => {
   const agentId = c.req.param("agentId");
-  const user: UserPayload = c.get("user");
+  const user = c.get("user") as UserPayload;
   const body = await c.req.json();
 
   // Verify user has access to agent's company
@@ -214,7 +203,7 @@ agentsRouter.put("/agents/:agentId", async (c) => {
 // DELETE /agents/:agentId
 agentsRouter.delete("/agents/:agentId", async (c) => {
   const agentId = c.req.param("agentId");
-  const user: UserPayload = c.get("user");
+  const user = c.get("user") as UserPayload;
 
   // Verify user has access to agent's company
   const agentCheck = await db
@@ -239,7 +228,7 @@ agentsRouter.delete("/agents/:agentId", async (c) => {
 // GET /companies/:companyId/tree — hierarchical org chart
 agentsRouter.get("/companies/:companyId/tree", async (c) => {
   const companyId = c.req.param("companyId");
-  const user: UserPayload = c.get("user");
+  const user = c.get("user") as UserPayload;
   const access = await db.select()
     .from(companyMembers)
     .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)

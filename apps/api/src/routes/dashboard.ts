@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { companies, companyMembers, agents, tasks, events, projects, goals, users, skills, agentSkills as agentSkillsTable } from "../db/schema";
+import { companies, companyMembers, agents, tasks, events, projects, goals, users } from "../db/schema";
 import { authMiddleware, UserPayload } from "../middleware/auth";
 
 const dashboard = new Hono();

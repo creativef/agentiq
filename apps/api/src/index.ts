@@ -21,7 +21,8 @@ import { goalsRouter } from "./routes/goals";
 import { projectsRouter } from "./routes/projects";
 import { executionsRouter } from "./routes/executions";
 import { auditMiddleware } from "./middleware/audit-log";
-import { skillsRouter } from "./routes/skills";
+// DEPRECATED: Hermes manages skills, not AgentIQ
+// import { skillsRouter } from "./routes/skills";
 
 export const app = new Hono();
 
@@ -34,7 +35,7 @@ app.use('/api/*', cors({
   credentials: true,
 }))
 
-import { sql } from 'drizzle-orm';
+
 
 app.get("/health", async (c) => {
   try {
@@ -61,7 +62,8 @@ app.route("/api", realtime);
 app.route("/api", data);
 app.route("/api", connectorsRouter);
 app.route("/api", goalsRouter);
-app.route("/api", skillsRouter);
+// DEPRECATED: Hermes manages skills, not AgentIQ
+// app.route("/api", skillsRouter);
 app.route("/api", projectsRouter);
 app.route("/api", executionsRouter);
 

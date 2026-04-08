@@ -24,14 +24,20 @@ export const authMiddleware = async (c: Context, next: Next) => {
     return c.json({ error: "Unauthorized" }, 401);
   }
   try {
-    const payload = await verify(token, JWT_SECRET, "HS256");
-    c.set("user", payload as UserPayload);
+    const payload = await verify(token, JWT_SECRET, "HS256") as Record<string, any>;
+    const userPayload: UserPayload = {
+      userId: payload.userId as string,
+      email: payload.email as string,
+      role: payload.role as string,
+      exp: payload.exp as number,
+    };
+    c.set("user", userPayload);
 
     // Guard: verify the user still exists in the database
     const userExists = await db
       .select({ id: users.id })
       .from(users)
-      .where(sql`${users.id} = ${(payload as UserPayload).userId}`)
+      .where(sql`${users.id} = ${userPayload.userId}`)
       .limit(1);
     if (userExists.length === 0) {
       // Cookie exists but user doesn't — stale session, return special code so frontend clears cookie and redirects

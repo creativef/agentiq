@@ -159,27 +159,28 @@ async function main() {
         created_at TIMESTAMP DEFAULT NOW()
       )
     `],
-    [`skills`, `
-      CREATE TABLE IF NOT EXISTS skills (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT NOT NULL,
-        category TEXT NOT NULL,
-        description TEXT,
-        instructions TEXT NOT NULL,
-        icon TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      )
-    `],
-    [`agent_skills`, `
-      CREATE TABLE IF NOT EXISTS agent_skills (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-        skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
-        custom_instructions TEXT,
-        created_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(agent_id, skill_id)
-      )
-    `],
+    // DEPRECATED: Hermes manages skills, not AgentIQ
+    // [`skills`, `
+    //   CREATE TABLE IF NOT EXISTS skills (
+    //     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    //     name TEXT NOT NULL,
+    //     category TEXT NOT NULL,
+    //     description TEXT,
+    //     instructions TEXT NOT NULL,
+    //     icon TEXT,
+    //     created_at TIMESTAMP DEFAULT NOW()
+    //   )
+    // `],
+    // [`agent_skills`, `
+    //   CREATE TABLE IF NOT EXISTS agent_skills (
+    //     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    //     agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    //     skill_id UUID NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    //     custom_instructions TEXT,
+    //     created_at TIMESTAMP DEFAULT NOW(),
+    //     UNIQUE(agent_id, skill_id)
+    //   )
+    // `],
   ];
 
   for (const [name, stmt] of tables) {
@@ -237,9 +238,10 @@ async function main() {
     ['idx_projects_company_id', 'CREATE INDEX IF NOT EXISTS idx_projects_company_id ON projects(company_id)'],
     ['idx_connectors_company', 'CREATE INDEX IF NOT EXISTS idx_connectors_company ON connectors(company_id, platform)'],
     ['idx_goals_company_id', 'CREATE INDEX IF NOT EXISTS idx_goals_company_id ON goals(company_id)'],
-    ['idx_agent_skills_agent_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_agent_id ON agent_skills(agent_id)'],
-    ['idx_agent_skills_skill_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_skill_id ON agent_skills(skill_id)'],
-    ['idx_skills_category', 'CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category)'],
+    // DEPRECATED: Hermes manages skills, not AgentIQ
+    // ['idx_agent_skills_agent_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_agent_id ON agent_skills(agent_id)'],
+    // ['idx_agent_skills_skill_id', 'CREATE INDEX IF NOT EXISTS idx_agent_skills_skill_id ON agent_skills(skill_id)'],
+    // ['idx_skills_category', 'CREATE INDEX IF NOT EXISTS idx_skills_category ON skills(category)'],
     ['idx_agents_reports_to', 'CREATE INDEX IF NOT EXISTS idx_agents_reports_to ON agents(reports_to)'],
     ['idx_journal_company_id', 'CREATE INDEX IF NOT EXISTS idx_journal_company_id ON journal_entries(company_id)'],
   ];
@@ -253,39 +255,8 @@ async function main() {
     }
   }
 
-  // Seed skill templates if none exist
-  const skillCount = await sql.unsafe("SELECT COUNT(*) as cnt FROM skills");
-  if (parseInt(skillCount[0].cnt) === 0) {
-    console.log("\nSeeding skill templates...");
-    const seedSkills = [
-      { name: "Strategic Planning", category: "leadership", icon: "📊",
-        description: "Business strategy and planning",
-        instructions: "You are a strategic advisor. Think long-term. Identify risks and opportunities. Provide data-driven recommendations. Present clear, actionable plans with timelines." },
-      { name: "Project Management", category: "operations", icon: "📋",
-        description: "Coordination and delivery",
-        instructions: "You are a project manager. Break work into actionable tasks. Track dependencies. Communicate blockers early. Optimize for team velocity." },
-      { name: "Code Generation", category: "development", icon: "💻",
-        description: "Write, review, and debug code",
-        instructions: "You are a skilled developer. Write clean, tested, documented code. Follow best practices. Prefer simplicity over cleverness." },
-      { name: "Research & Analysis", category: "analysis", icon: "🔍",
-        description: "Market research and data analysis",
-        instructions: "You are a research analyst. Gather data from reliable sources. Synthesize findings into clear, actionable insights. Always cite sources." },
-      { name: "Content Writing", category: "content", icon: "📝",
-        description: "Blog posts, documentation, and copy",
-        instructions: "You are a senior content writer. Write clear, engaging, audience-appropriate content. Use active voice. Edit ruthlessly." },
-    ];
-
-    for (const s of seedSkills) {
-      try {
-        await sql`INSERT INTO skills (id, name, category, description, instructions, icon) VALUES (${crypto.randomUUID()}, ${s.name}, ${s.category}, ${s.description}, ${s.instructions}, ${s.icon})`;
-        console.log(`  [SEED] ${s.name}`);
-      } catch (e: any) {
-        console.log(`  [SKIP seed] ${s.name}: ${e.message.split('\n')[0]}`);
-      }
-    }
-  } else {
-    console.log("\nSkills already seeded, skipping.");
-  }
+  // DEPRECATED: Hermes manages skills, not AgentIQ
+  // Skill seeding removed
 
 
   // Task Execution Engine Columns
