@@ -39,7 +39,7 @@ app.use('/api/*', cors({
 
 app.get("/health", async (c) => {
   try {
-    await db.select(sql`1`);
+    await db.execute(sql`SELECT 1`);
     return c.json({ status: "healthy", database: "connected", timestamp: Date.now() });
   } catch (e) {
     return c.json({ status: "error", database: "disconnected" }, 503);

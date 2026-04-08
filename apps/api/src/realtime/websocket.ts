@@ -19,7 +19,7 @@ export class ExecutionWebSocketServer {
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server, path: '/ws/executions' });
 
-    this.wss.on('connection', (ws, req) => {
+    this.wss.on('connection', (ws: WebSocket, req: any) => {
       const clientId = `client-${this.nextClientId++}`;
       const client: Client = { ws, subscriptions: new Set() };
       this.clients.set(clientId, client);
@@ -41,9 +41,9 @@ export class ExecutionWebSocketServer {
         client.subscriptions.add(`company:${companyId}`);
       }
 
-      ws.on('message', (data) => this.handleMessage(clientId, data.toString()));
+      ws.on('message', (data: any) => this.handleMessage(clientId, data.toString()));
       ws.on('close', () => this.handleDisconnect(clientId));
-      ws.on('error', (err) => this.handleError(clientId, err));
+      ws.on('error', (err: Error) => this.handleError(clientId, err));
 
       // Send welcome message
       ws.send(JSON.stringify({
@@ -59,7 +59,7 @@ export class ExecutionWebSocketServer {
     if (!client) return;
 
     try {
-      const data = JSON.parse(message);
+      const data: any = JSON.parse(message);
       
       switch (data.type) {
         case 'subscribe':
@@ -113,7 +113,7 @@ export class ExecutionWebSocketServer {
 
     try {
       client.ws.send(JSON.stringify(data));
-    } catch (err) {
+    } catch (err: any) {
       console.error(`[WebSocket] Error sending to client ${clientId}:`, err);
     }
   }

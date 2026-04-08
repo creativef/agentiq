@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <style>
+        body { font-family: monospace; background: #111; color: #0f0; padding: 20px; }
+        #status { padding: 10px; margin: 10px 0; border: 1px solid #333; }
+        .connected { color: #0f0; }
+        .disconnected { color: #f00; }
+        #messages { height: 300px; overflow-y: auto; border: 1px solid #333; padding: 10px; }
+        .message { margin: 5px 0; padding: 5px; border-left: 3px solid #444; }
+        .event { border-left-color: #00f; }
+        .result { border-left-color: #0f0; }
+        .error { border-left-color: #f00; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Test for AgentIQ Hermes Bridge</h1>
+    
+    <div id="status" class="disconnected">❌ Disconnected</div>
+    
+    <div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <button onclick="testTask()">Create Test Task</button>
+        <button onclick="clearMessages()">Clear</button>
+    </div>
+    
+    <div id="messages"></div>
+    
+    <script>
+        let ws = null;
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        
+        function logMessage(type, text) {
+            const div = document.createElement('div');
+            div.className = `message ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+        
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                logMessage('info', 'Already connected');
+                return;
+            }
+            
+            const companyId = 'test-company';
+            const url = `ws://localhost:3000/ws/executions?companyId=${companyId}`;
+            
+            logMessage('info', `Connecting to ${url}...`);
+            ws = new WebSocket(url);
+            
+            ws.onopen = () => {
+                statusEl.textContent = '✅ Connected';
+                statusEl.className = 'status connected';
+                logMessage('info', 'WebSocket connected');
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    logMessage('event', `${data.type}: ${JSON.stringify(data, null, 2)}`);
+                } catch (e) {
+                    logMessage('error', `Failed to parse message: ${event.data}`);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                logMessage('error', `WebSocket error: ${error}`);
+            };
+            
+            ws.onclose = () => {
+                statusEl.textContent = '❌ Disconnected';
+                statusEl.className = 'status disconnected';
+                logMessage('info', 'WebSocket disconnected');
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        async function testTask() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                logMessage('error', 'Not connected. Connect first.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Test Hermes Execution',
+                        description: 'List files in current directory',
+                        companyId: 'test-company'
+                    })
+                });
+                
+                const data = await response.json();
+                logMessage('info', `Task created: ${data.task.id}`);
+                logMessage('info', `Execution run: ${data.run.id}`);
+                
+                // Subscribe to this run
+                ws.send(JSON.stringify({
+                    type: 'subscribe',
+                    runId: data.run.id
+                }));
+                
+            } catch (error) {
+                logMessage('error', `Failed to create task: ${error}`);
+            }
+        }
+        
+        function clearMessages() {
+            messagesEl.innerHTML = '';
+        }
+        
+        // Auto-connect on load
+        window.addEventListener('load', () => {
+            setTimeout(connect, 1000);
+        });
+    </script>
+</body>
+</html>

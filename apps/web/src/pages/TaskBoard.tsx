@@ -131,15 +131,17 @@ export default function TaskBoard() {
   };
 
   const handleExecute = async (taskId: string) => {
-    const res = await fetch(`/api/tasks/${taskId}/execute`, { method: "POST", credentials: "include" });
+    const res = await fetch(`/api/executions`, { 
+      method: "POST", 
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId })
+    });
     if (res.ok) {
       const data = await res.json();
-      const update = { 
-        status: data.success ? "done" : "blocked",
-        result: data.result,
-        execStatus: data.success ? "completed" : "failed" 
-      };
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...update } : t));
+      console.log('Execution started:', data);
+      // The WebSocket will handle real-time updates
+      // We'll update the task status when we get WebSocket events
     }
   };
 

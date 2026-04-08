@@ -34,7 +34,7 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const agents = pgTable("agents", {
+export const agents: any = pgTable("agents", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),
   projectId: uuid("project_id").references(() => projects.id),
@@ -96,7 +96,7 @@ export const connectors = pgTable("connectors", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const goals = pgTable("goals", {
+export const goals: any = pgTable("goals", {
   id: uuid("id").primaryKey().defaultRandom(),
   companyId: uuid("company_id").notNull().references(() => companies.id),
   parentId: uuid("parent_id").references(() => goals.id),

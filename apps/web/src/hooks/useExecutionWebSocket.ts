@@ -35,9 +35,12 @@ export function useExecutionWebSocket({
     }
 
     // Build WebSocket URL
+    // In development, WebSocket server runs on port 3000 (API server)
+    // In production, it runs on the same host as the API
+    const isDev = import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    let url = `${protocol}//${host}/ws/executions`;
+    const host = isDev ? 'localhost:5173' : window.location.host; // Use Vite dev server port
+    let url = `${protocol}//${host}/ws/executions`; // Vite will proxy /ws to localhost:3000
 
     // Add query params
     const params = new URLSearchParams();

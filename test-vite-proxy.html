@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vite Proxy WebSocket Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .log { margin: 5px 0; padding: 5px; border-left: 3px solid #ccc; }
+        .success { border-left-color: #0f0; }
+        .error { border-left-color: #f00; }
+        .info { border-left-color: #00f; }
+    </style>
+</head>
+<body>
+    <h1>Vite Proxy WebSocket Test</h1>
+    <div id="log"></div>
+    
+    <script>
+        const logEl = document.getElementById('log');
+        
+        function log(type, message) {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.appendChild(div);
+        }
+        
+        // Test 1: Direct API connection (should work)
+        log('info', 'Testing direct API connection to localhost:3000...');
+        fetch('http://localhost:3000/api/health')
+            .then(res => res.json())
+            .then(data => {
+                log('success', `Direct API works: ${data.status}`);
+            })
+            .catch(err => {
+                log('error', `Direct API failed: ${err.message}`);
+            });
+        
+        // Test 2: Vite proxy API connection (should work)
+        log('info', 'Testing Vite proxy API connection to localhost:5173...');
+        fetch('http://localhost:5173/api/health')
+            .then(res => res.json())
+            .then(data => {
+                log('success', `Vite proxy API works: ${data.status}`);
+            })
+            .catch(err => {
+                log('error', `Vite proxy API failed: ${err.message}`);
+            });
+        
+        // Test 3: Direct WebSocket connection (should work if API server running)
+        log('info', 'Testing direct WebSocket to localhost:3000...');
+        const wsDirect = new WebSocket('ws://localhost:3000/ws/executions?companyId=test');
+        wsDirect.onopen = () => {
+            log('success', 'Direct WebSocket connected');
+            wsDirect.close();
+        };
+        wsDirect.onerror = (err) => {
+            log('error', `Direct WebSocket failed: ${err}`);
+        };
+        
+        // Test 4: Vite proxy WebSocket connection (what the app uses)
+        setTimeout(() => {
+            log('info', 'Testing Vite proxy WebSocket to localhost:5173...');
+            const wsProxy = new WebSocket('ws://localhost:5173/ws/executions?companyId=test');
+            wsProxy.onopen = () => {
+                log('success', 'Vite proxy WebSocket connected! ✅');
+                wsProxy.close();
+            };
+            wsProxy.onerror = (err) => {
+                log('error', `Vite proxy WebSocket failed: ${err}`);
+            };
+            wsProxy.onclose = () => {
+                log('info', 'Vite proxy WebSocket closed');
+            };
+        }, 1000);
+    </script>
+</body>
+</html>

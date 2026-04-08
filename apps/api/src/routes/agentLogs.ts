@@ -10,7 +10,7 @@ agentLogsRouter.use(authMiddleware);
 // GET /agents/:id/activity — Get the activity log for a specific agent
 agentLogsRouter.get("/agents/:agentId/activity", async (c) => {
   const agentId = c.req.param("agentId");
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
 
   // Check access
   const agentCheck = await db.select({ companyId: agents.companyId }).from(agents).where(sql`${agents.id} = ${agentId}`).limit(1);
@@ -41,7 +41,7 @@ agentLogsRouter.get("/agents/:agentId/activity", async (c) => {
 // GET /companies/:id/activity — Recent activity across all agents in a company
 agentLogsRouter.get("/companies/:companyId/activity", async (c) => {
   const companyId = c.req.param("companyId");
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
   const limit = Math.min(parseInt(c.req.query("limit") || "200"), 500);
 
   const access = await db

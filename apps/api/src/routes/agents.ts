@@ -9,7 +9,7 @@ agentsRouter.use(authMiddleware);
 
 // GET /agents - list all agents for current user's companies
 agentsRouter.get("/agents", async (c) => {
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
   const result = await db
     .select({
       id: agents.id,
@@ -36,7 +36,7 @@ agentsRouter.get("/agents", async (c) => {
 agentsRouter.get("/companies/:companyId/agents", async (c) => {
   const companyId = c.req.param("companyId");
   const projectId = c.req.query("projectId") || null;
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
   const access = await db.select()
     .from(companyMembers)
     .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
@@ -74,7 +74,7 @@ agentsRouter.get("/companies/:companyId/agents", async (c) => {
 // POST /companies/:companyId/agents - create agent
 agentsRouter.post("/companies/:companyId/agents", async (c) => {
   const companyId = c.req.param("companyId");
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
   const access = await db.select()
     .from(companyMembers)
     .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
@@ -107,7 +107,7 @@ agentsRouter.post("/companies/:companyId/agents", async (c) => {
 // GET /agents/:agentId/status — data-only status
 agentsRouter.get("/agents/:agentId/status", async (c) => {
   const agentId = c.req.param("agentId");
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
 
   const agentCheck = await db.select({ id: agents.id, companyId: agents.companyId, name: agents.name, role: agents.role, lastHeartbeat: agents.lastHeartbeat })
     .from(agents)
@@ -160,7 +160,7 @@ agentsRouter.get("/agents/:agentId/status", async (c) => {
 // PUT /agents/:agentId
 agentsRouter.put("/agents/:agentId", async (c) => {
   const agentId = c.req.param("agentId");
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
   const body = await c.req.json();
 
   // Verify user has access to agent's company
@@ -203,7 +203,7 @@ agentsRouter.put("/agents/:agentId", async (c) => {
 // DELETE /agents/:agentId
 agentsRouter.delete("/agents/:agentId", async (c) => {
   const agentId = c.req.param("agentId");
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
 
   // Verify user has access to agent's company
   const agentCheck = await db
@@ -228,7 +228,7 @@ agentsRouter.delete("/agents/:agentId", async (c) => {
 // GET /companies/:companyId/tree — hierarchical org chart
 agentsRouter.get("/companies/:companyId/tree", async (c) => {
   const companyId = c.req.param("companyId");
-  const user = c.get("user") as UserPayload;
+  const user = (c as any).get("user") as UserPayload;
   const access = await db.select()
     .from(companyMembers)
     .where(sql`${companyMembers.companyId} = ${companyId} AND ${companyMembers.userId} = ${user.userId}`)
